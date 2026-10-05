@@ -1,6 +1,6 @@
 import "server-only";
 
-import { Role, type Prisma } from "@prisma/client";
+import { Prisma, Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { hashSecret, verifySecret } from "@/lib/auth/password";
 import {
@@ -213,7 +213,7 @@ export async function issueInvitations(params: {
       console.error("[invitations] Error emitiendo invitación:", error);
       errors.push({
         email: invitee.email,
-        reason: "No se pudo generar la invitación. Revisa RUT y correo.",
+        reason: describeIssueError(error),
       });
     }
   }
@@ -361,7 +361,7 @@ export async function issueConsolidatedInvitations(params: {
         console.error("[consolidated-invitations] Error emitiendo invitación:", err);
         groupErrors.push({
           email: invitee.email,
-          reason: "No se pudo generar la invitación. Revisa RUT y correo.",
+          reason: describeIssueError(err),
         });
       }
     }
@@ -482,6 +482,23 @@ export async function issueConsolidatedInvitations(params: {
   };
 }
 
+
+/** Traduce el error de Prisma a un motivo legible para el administrador. */
+function describeIssueError(error: unknown): string {
+  if (error instanceof Prisma.PrismaClientKnownRequestError) {
+    if (error.code === "P2002") {
+      const target = Array.isArray(error.meta?.target) ? error.meta.target.join(", ") : String(error.meta?.target ?? "");
+      return `El RUT o correo ya pertenece a otro funcionario del colegio (${target}).`;
+    }
+    if (error.code === "P2003") return "Referencia inválida (cargo, área o usuario que no existe).";
+    if (error.code === "P2000") return "Un dato es demasiado largo (revisa los correos de jefatura/asistente).";
+    return `Error de base de datos ${error.code}.`;
+  }
+  const message = error instanceof Error ? error.message.trim().split(/\r?\n/).pop() : "";
+  return message
+    ? `No se pudo generar la invitación: ${message.slice(0, 200)}`
+    : "No se pudo generar la invitación. Revisa RUT y correo.";
+}
 
 async function upsertFuncionario(
   tx: Prisma.TransactionClient,

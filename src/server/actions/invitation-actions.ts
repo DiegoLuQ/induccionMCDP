@@ -123,7 +123,14 @@ export async function createConsolidatedInvitationsAction(
     revalidatePath("/admin");
 
     if (result.totalIssued === 0) {
-      return failure("No se pudo emitir ninguna invitación. Revisa los datos de los funcionarios.");
+      const reasons = [
+        ...new Set(result.groups.flatMap((g) => g.errors.map((e) => e.reason))),
+      ];
+      return failure(
+        reasons.length > 0
+          ? `No se pudo emitir ninguna invitación. Motivo: ${reasons.slice(0, 3).join(" | ")}`
+          : "No se pudo emitir ninguna invitación. Revisa los datos de los funcionarios.",
+      );
     }
 
     const emailNote = parsed.data.sendEmail

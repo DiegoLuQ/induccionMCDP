@@ -75,6 +75,16 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
     return videos;
   }, [videos, filter]);
 
+  const visibleDeletable = visible.filter((v) => v.usages.length === 0 && !v.isRecent);
+
+  function toggleAllVisible() {
+    const names = visibleDeletable.map((v) => v.filename);
+    const allSelected = names.every((n) => selected.includes(n));
+    setSelected((prev) =>
+      allSelected ? prev.filter((f) => !names.includes(f)) : [...new Set([...prev, ...names])],
+    );
+  }
+
   const toDeleteSize = videos
     .filter((v) => toDelete.includes(v.filename))
     .reduce((acc, v) => acc + v.size, 0);
@@ -154,17 +164,16 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
               ))}
             </div>
             <div className="flex flex-wrap gap-2">
-              {selected.length > 0 && (
-                <Button
-                  size="sm"
-                  variant="destructive"
-                  className="h-8 gap-1.5 text-xs"
-                  onClick={() => openConfirm(selected)}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                  Eliminar seleccionados ({selected.length})
-                </Button>
-              )}
+              <Button
+                size="sm"
+                variant="destructive"
+                className="h-8 gap-1.5 text-xs"
+                disabled={selected.length === 0}
+                onClick={() => openConfirm(selected)}
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Eliminar seleccionados ({selected.length})
+              </Button>
               <Button
                 size="sm"
                 variant="outline"
@@ -182,7 +191,21 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
             <Table>
               <TableHeader className="bg-muted/40">
                 <TableRow>
-                  <TableHead className="w-10 px-3" />
+                  <TableHead className="w-10 px-3 text-center">
+                    <input
+                      type="checkbox"
+                      checked={visibleDeletable.length > 0 && visibleDeletable.every((v) => selected.includes(v.filename))}
+                      disabled={visibleDeletable.length === 0}
+                      onChange={toggleAllVisible}
+                      className="h-4 w-4 cursor-pointer rounded border-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
+                      title={
+                        visibleDeletable.length === 0
+                          ? "No hay videos sueltos para seleccionar"
+                          : "Seleccionar todos los sueltos visibles"
+                      }
+                      aria-label="Seleccionar todos los sueltos visibles"
+                    />
+                  </TableHead>
                   <TableHead className="min-w-[220px]">Video</TableHead>
                   <TableHead className="w-24">Tamaño</TableHead>
                   <TableHead className="w-40">Subido</TableHead>
@@ -204,15 +227,21 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
                     return (
                       <TableRow key={video.filename}>
                         <TableCell className="px-3 text-center">
-                          {canDelete && (
-                            <input
-                              type="checkbox"
-                              checked={selected.includes(video.filename)}
-                              onChange={() => toggle(video.filename)}
-                              className="h-4 w-4 cursor-pointer rounded border-gray-300"
-                              aria-label={`Seleccionar ${displayName(video.filename)}`}
-                            />
-                          )}
+                          <input
+                            type="checkbox"
+                            checked={canDelete && selected.includes(video.filename)}
+                            disabled={!canDelete}
+                            onChange={() => toggle(video.filename)}
+                            className="h-4 w-4 cursor-pointer rounded border-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
+                            title={
+                              canDelete
+                                ? "Seleccionar para eliminar"
+                                : isOrphan
+                                  ? "Subido hace menos de 24 h: aún no se puede eliminar"
+                                  : "En uso por una lección: no se puede eliminar"
+                            }
+                            aria-label={`Seleccionar ${displayName(video.filename)}`}
+                          />
                         </TableCell>
                         <TableCell>
                           <span className="block font-medium text-foreground break-all">
