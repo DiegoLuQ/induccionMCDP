@@ -11,6 +11,7 @@ import {
   Settings,
   Tags,
   Users,
+  Video,
 } from "lucide-react";
 
 export interface NavItem {
@@ -100,6 +101,12 @@ export const NAVIGATION: NavSection[] = [
         icon: Building2,
         roles: [Role.SUPER_ADMIN],
       },
+      {
+        href: "/configuracion/videos",
+        label: "Videos subidos",
+        icon: Video,
+        roles: [Role.SUPER_ADMIN],
+      },
     ],
   },
 ];
@@ -131,6 +138,7 @@ export function visibleNavigation(
 export const ROUTE_GUARDS: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/admin", roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH] },
   { prefix: "/configuracion/colegios", roles: [Role.SUPER_ADMIN] },
+  { prefix: "/configuracion/videos", roles: [Role.SUPER_ADMIN] },
   { prefix: "/configuracion", roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH] },
   {
     prefix: "/mis-inducciones",

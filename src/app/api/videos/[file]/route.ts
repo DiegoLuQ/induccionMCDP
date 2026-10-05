@@ -4,6 +4,7 @@ import { stat } from "fs/promises";
 import path from "path";
 import { Readable } from "stream";
 import { getSession } from "@/lib/auth/session";
+import { VIDEO_UPLOAD_DIR } from "@/lib/uploads";
 
 /**
  * Sirve los videos subidos a `public/uploads/videos`.
@@ -13,8 +14,6 @@ import { getSession } from "@/lib/auth/session";
  * guardadas (`/uploads/videos/...`) llegan por el rewrite de next.config.mjs.
  * Soporta peticiones Range para que el reproductor pueda adelantar el video.
  */
-
-const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads", "videos");
 
 const MIME_TYPES: Record<string, string> = {
   ".mp4": "video/mp4",
@@ -41,7 +40,7 @@ export async function GET(
     return new NextResponse("No encontrado", { status: 404 });
   }
 
-  const filePath = path.join(UPLOAD_DIR, filename);
+  const filePath = path.join(VIDEO_UPLOAD_DIR, filename);
   let size: number;
   try {
     const info = await stat(filePath);
