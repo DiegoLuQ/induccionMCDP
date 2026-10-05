@@ -4,6 +4,9 @@ import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
+  ArrowDown,
+  ArrowUp,
+  ArrowUpDown,
   Award,
   BookOpen,
   CheckCircle2,
@@ -101,8 +104,22 @@ export function StaffTable({
     "ALL" | "COMPLETED" | "NOT_COMPLETED" | "IN_PROGRESS" | "NOT_ASSIGNED"
   >("ALL");
 
+  // Orden de la tabla (clic en los encabezados Funcionario, RUT y Fecha ingreso)
+  const [sort, setSort] = useState<{ key: SortKey; dir: "asc" | "desc" }>({
+    key: "name",
+    dir: "asc",
+  });
+
+  function handleSort(key: SortKey) {
+    setSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "asc" ? "desc" : "asc" }
+        : { key, dir: "asc" },
+    );
+  }
+
   // Filtrado reactivo por nombre, rut, email, cargo, estado institucional y curso/evaluación
-  const filteredUsers = useMemo(() => {
+  const unsortedUsers = useMemo(() => {
     let list = users;
 
     // 1. Filtro por estado institucional (Activo / Inactivo)
@@ -184,6 +201,11 @@ export function StaffTable({
       );
     });
   }, [users, searchTerm, statusFilter, selectedCourseId, courseStatusFilter]);
+
+  const filteredUsers = useMemo(
+    () => [...unsortedUsers].sort((a, b) => compareStaff(a, b, sort.key, sort.dir)),
+    [unsortedUsers, sort],
+  );
 
   const allFilteredSelected =
     filteredUsers.length > 0 &&
@@ -530,8 +552,15 @@ export function StaffTable({
                     title="Seleccionar todos"
                   />
                 </TableHead>
-                <TableHead className="min-w-[180px]">Funcionario</TableHead>
-                <TableHead className="w-32">RUT</TableHead>
+                <TableHead className="min-w-[180px]">
+                  <SortableHeader label="Funcionario" sortKey="name" sort={sort} onSort={handleSort} />
+                </TableHead>
+                <TableHead className="w-32">
+                  <SortableHeader label="RUT" sortKey="rut" sort={sort} onSort={handleSort} />
+                </TableHead>
+                <TableHead className="w-28">
+                  <SortableHeader label="Fecha ingreso" sortKey="hireDate" sort={sort} onSort={handleSort} />
+                </TableHead>
                 <TableHead className="min-w-[150px]">Cargo y Área</TableHead>
                 <TableHead className="min-w-[240px]">
                   Inducciones y Capacitaciones
@@ -543,7 +572,7 @@ export function StaffTable({
             <TableBody>
               {filteredUsers.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="h-40 text-center">
+                  <TableCell colSpan={8} className="h-40 text-center">
                     <div className="flex flex-col items-center justify-center gap-2 py-6 text-muted-foreground">
                       <Users className="h-8 w-8 text-muted-foreground/50" />
                       <p className="text-sm font-medium text-foreground">
@@ -605,6 +634,15 @@ export function StaffTable({
                       {/* RUT */}
                       <TableCell className="tabular-nums font-mono text-xs">
                         {formatRut(user.rut)}
+                      </TableCell>
+
+                      {/* Fecha de ingreso */}
+                      <TableCell className="tabular-nums text-xs">
+                        {user.hireDate ? (
+                          formatHireDate(user.hireDate)
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </TableCell>
 
                       {/* Cargo y Área */}
@@ -807,5 +845,67 @@ export function StaffTable({
         />
       )}
     </>
+  );
+}
+
+type SortKey = "name" | "rut" | "hireDate";
+
+/** La fecha se guarda como medianoche UTC; se muestra en UTC para no correr el día. */
+function formatHireDate(value: Date | string): string {
+  return new Date(value).toLocaleDateString("es-CL", {
+    timeZone: "UTC",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  });
+}
+
+function rutBody(rut: string): number {
+  return Number(rut.split("-")[0]?.replace(/\D/g, "")) || 0;
+}
+
+/** Ordena por la columna elegida; los funcionarios sin fecha de ingreso van al final. */
+function compareStaff(
+  a: StaffDirectoryItem,
+  b: StaffDirectoryItem,
+  key: SortKey,
+  dir: "asc" | "desc",
+): number {
+  const sign = dir === "asc" ? 1 : -1;
+  if (key === "hireDate") {
+    if (!a.hireDate && !b.hireDate) return a.name.localeCompare(b.name, "es");
+    if (!a.hireDate) return 1;
+    if (!b.hireDate) return -1;
+    return sign * (new Date(a.hireDate).getTime() - new Date(b.hireDate).getTime());
+  }
+  if (key === "rut") return sign * (rutBody(a.rut) - rutBody(b.rut));
+  return sign * a.name.localeCompare(b.name, "es", { sensitivity: "base" });
+}
+
+function SortableHeader({
+  label,
+  sortKey,
+  sort,
+  onSort,
+}: {
+  label: string;
+  sortKey: SortKey;
+  sort: { key: SortKey; dir: "asc" | "desc" };
+  onSort: (key: SortKey) => void;
+}) {
+  const active = sort.key === sortKey;
+  const Icon = !active ? ArrowUpDown : sort.dir === "asc" ? ArrowUp : ArrowDown;
+  return (
+    <button
+      type="button"
+      onClick={() => onSort(sortKey)}
+      className={`inline-flex items-center gap-1 hover:text-foreground ${
+        active ? "text-foreground" : ""
+      }`}
+      title={`Ordenar por ${label.toLowerCase()}`}
+    >
+      {label}
+      <Icon className={`h-3.5 w-3.5 ${active ? "" : "opacity-50"}`} />
+    </button>
   );
 }

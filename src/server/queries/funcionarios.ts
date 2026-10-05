@@ -103,6 +103,7 @@ export interface StaffDirectoryItem {
   corporateEmail: string | null;
   username: string | null;
   phone: string | null;
+  hireDate: Date | null;
   role: Role;
   isActive: boolean;
   lastLoginAt: Date | null;
@@ -236,6 +237,7 @@ export const getStaffDirectoryWithCourses = cache(
         corporateEmail: u.corporateEmail,
         username: u.username,
         phone: u.phone,
+        hireDate: u.hireDate,
         role: u.role,
         isActive: u.isActive,
         lastLoginAt: u.lastLoginAt,

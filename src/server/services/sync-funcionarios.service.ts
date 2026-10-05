@@ -14,6 +14,8 @@ interface ExternalFuncionarioRow {
   activo_portal: number;
   jefe_directo: string | null;
   jefe_directo_nombre: string | null;
+  /** "YYYY-MM-DD" (formateado en SQL para evitar desfases de zona horaria). */
+  fecha_ingreso: string | null;
   area_nombre?: string | null;
   cargo_nombre?: string | null;
   colegio_nombre?: string | null;
@@ -104,6 +106,7 @@ export async function syncFuncionariosFromExternalDb(
       f.activo_portal,
       f.jefe_directo,
       f.jefe_directo_nombre,
+      DATE_FORMAT(f.fecha_ingreso, '%Y-%m-%d') AS fecha_ingreso,
       a.nombre AS area_nombre,
       cg.nombre AS cargo_nombre,
       c.nombre AS colegio_nombre,
@@ -194,6 +197,9 @@ export async function syncFuncionariosFromExternalDb(
 
         const formattedName = toTitleCase(f.nombre);
         const isActive = f.activo_portal === 1;
+        const hireDate = f.fecha_ingreso
+          ? new Date(`${f.fecha_ingreso}T00:00:00Z`)
+          : null;
 
         // Resolver o crear Área si viene informada
         let resolvedAreaId: string | null = null;
@@ -282,6 +288,7 @@ export async function syncFuncionariosFromExternalDb(
               positionId: resolvedPositionId ?? existingUser.positionId,
               areaId: resolvedAreaId ?? existingUser.areaId,
               isActive: isActive,
+              hireDate,
             },
           });
           instResult.updated += 1;
@@ -313,6 +320,7 @@ export async function syncFuncionariosFromExternalDb(
               positionId: resolvedPositionId,
               areaId: resolvedAreaId,
               isActive: isActive,
+              hireDate,
             },
           });
           instResult.created += 1;

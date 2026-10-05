@@ -235,6 +235,8 @@ model User {
   /// Nombre de usuario para iniciar sesión. Único en toda la plataforma.
   username      String?  @unique @db.VarChar(60)
   phone         String?  @db.VarChar(40)
+  /// Fecha de ingreso al colegio (sincronizada desde db_central). Opcional.
+  hireDate      DateTime? @db.Date
   role          Role     @default(FUNCIONARIO)
   /// Cargo del catálogo del colegio. Nulo = sin cargo asignado.
   positionId    String?
