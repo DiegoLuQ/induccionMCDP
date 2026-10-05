@@ -1,0 +1,550 @@
+// ---------------------------------------------------------------------------
+// Plataforma SaaS Multi-Tenant de Inducción y Capacitación para Colegios
+// Prisma ORM · MySQL 8+
+// ---------------------------------------------------------------------------
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// ENUMS
+// ---------------------------------------------------------------------------
+
+enum Role {
+  SUPER_ADMIN
+  ADMIN_RRHH
+  FUNCIONARIO
+}
+
+// Los cargos (Position) y los tipos de curso (CourseType) dejaron de ser enums
+// para que cada colegio administre su propio catálogo desde la interfaz.
+
+/// Formato del contenido audiovisual del curso.
+enum VideoFormat {
+  /// Un único video largo (ej. 15 min) con evaluación al final.
+  FORMATO_LARGO
+  /// Serie de micro-videos / cápsulas (ej. 3 de 5 min).
+  MICRO_VIDEOS
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  OPEN_TEXT
+  /// Escala de opinión (de acuerdo / en desacuerdo). No puntúa: mide
+  /// percepción, no comprensión, y se informa por separado.
+  LIKERT
+}
+
+enum ProgressStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+enum SubmissionStatus {
+  PASSED
+  FAILED
+  PENDING_REVIEW
+}
+
+// ---------------------------------------------------------------------------
+// TENANT
+// ---------------------------------------------------------------------------
+
+model Institution {
+  id        String   @id @default(cuid())
+  name      String   @db.VarChar(160)
+  slug      String   @unique @db.VarChar(80)
+  /// Dominio institucional permitido para el registro/invitación (ej. colegiomacaya.cl)
+  domain    String   @unique @db.VarChar(120)
+  /// Imagen o logo del establecimiento (URL).
+  logoUrl   String?  @db.VarChar(512)
+  /// Rol Base de Datos del Ministerio de Educación.
+  rbd       String?  @db.VarChar(20)
+  /// RUT del sostenedor/establecimiento, normalizado (ej. 76123456-7).
+  rut       String?  @db.VarChar(12)
+  phone     String?  @db.VarChar(40)
+  address   String?  @db.VarChar(255)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  users       User[]
+  memberships InstitutionMembership[]
+  courses     Course[]
+  invitations Invitation[]
+  categories  Category[]
+  tags        Tag[]
+  positions   Position[]
+  courseTypes CourseType[]
+  areas       Area[]
+  socialLinks InstitutionSocialLink[]
+  autoInvitationConfig AutoInvitationConfig?
+
+  @@index([isActive])
+  @@map("institutions")
+}
+
+/// Redes sociales y sitios del establecimiento (Instagram, TikTok, web, …).
+model InstitutionSocialLink {
+  id            String   @id @default(cuid())
+  institutionId String
+  /// Identificador de la plataforma: instagram, tiktok, facebook, web, otro…
+  platform      String   @db.VarChar(40)
+  /// Nombre a mostrar cuando la plataforma es "otro".
+  label         String?  @db.VarChar(80)
+  url           String   @db.VarChar(512)
+  orderIndex    Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@index([institutionId])
+  @@map("institution_social_links")
+}
+
+/// Categoría de cursos, propia de cada colegio (vocabulario controlado).
+model Category {
+  id            String   @id @default(cuid())
+  institutionId String
+  name          String   @db.VarChar(80)
+  slug          String   @db.VarChar(80)
+  /// Color hex para distinguirla en la UI (ej. "#0ea5e9").
+  color         String?  @db.VarChar(9)
+  description   String?  @db.VarChar(255)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  courses     Course[]
+
+  @@unique([institutionId, slug])
+  @@index([institutionId])
+  @@map("categories")
+}
+
+/// Cargo institucional (Docente, Asistente de la Educación, …). Catálogo
+/// administrable por colegio; reemplaza al antiguo enum `Position`.
+model Position {
+  id            String   @id @default(cuid())
+  institutionId String
+  name          String   @db.VarChar(80)
+  /// Identificador estable usado por las reglas de navegación (RBAC).
+  slug          String   @db.VarChar(80)
+  description   String?  @db.VarChar(255)
+  /// Orden de despliegue en los selectores.
+  orderIndex    Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  institution   Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  users         User[]
+  targetedBy    Course[]    @relation("CourseTargetPositions")
+
+  @@unique([institutionId, slug])
+  @@index([institutionId, isActive])
+  @@map("positions")
+}
+
+/// Área o departamento interno (Convivencia, UTP, Finanzas…), por colegio.
+model Area {
+  id             String   @id @default(cuid())
+  institutionId  String
+  name           String   @db.VarChar(80)
+  slug           String   @db.VarChar(80)
+  description    String?  @db.VarChar(255)
+  /// Nombre completo del jefe o jefes de área / departamento
+  jefeNombre     String?  @db.VarChar(500)
+  /// RUT del jefe o jefes de área (separados por coma si son varios)
+  jefeRut        String?  @db.VarChar(255)
+  /// Correo del jefe o jefes de área para notificaciones e inducciones
+  jefeEmail      String?  @db.VarChar(500)
+  /// Correo de asistente / secretaria de área para copia (CC)
+  asistenteEmail String?  @db.VarChar(500)
+  orderIndex     Int      @default(0)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  users       User[]
+
+  @@unique([institutionId, slug])
+  @@index([institutionId, isActive])
+  @@map("areas")
+}
+
+/// Tipo de curso (Inducción, Capacitación, …), administrable por colegio.
+model CourseType {
+  id            String   @id @default(cuid())
+  institutionId String
+  name          String   @db.VarChar(80)
+  slug          String   @db.VarChar(80)
+  color         String?  @db.VarChar(9)
+  description   String?  @db.VarChar(255)
+  orderIndex    Int      @default(0)
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  courses     Course[]
+
+  @@unique([institutionId, slug])
+  @@index([institutionId, isActive])
+  @@map("course_types")
+}
+
+/// Etiqueta libre para filtrar y agrupar cursos dentro de un colegio.
+model Tag {
+  id            String   @id @default(cuid())
+  institutionId String
+  name          String   @db.VarChar(60)
+  slug          String   @db.VarChar(60)
+  createdAt     DateTime @default(now())
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  courses     Course[]
+
+  @@unique([institutionId, slug])
+  @@index([institutionId])
+  @@map("tags")
+}
+
+// ---------------------------------------------------------------------------
+// USUARIOS Y MULTI-TENANCY
+// ---------------------------------------------------------------------------
+
+model User {
+  id            String   @id @default(cuid())
+  /// RUT normalizado sin puntos y con guion (ej. 12345678-9)
+  rut           String   @db.VarChar(12)
+  name          String   @db.VarChar(160)
+  /// Correo personal o de contacto. Es el que identifica al usuario.
+  email         String   @db.VarChar(180)
+  /// Correo institucional (@dominio del colegio). Opcional.
+  corporateEmail String? @db.VarChar(180)
+  /// Nombre de usuario para iniciar sesión. Único en toda la plataforma.
+  username      String?  @unique @db.VarChar(60)
+  phone         String?  @db.VarChar(40)
+  role          Role     @default(FUNCIONARIO)
+  /// Cargo del catálogo del colegio. Nulo = sin cargo asignado.
+  positionId    String?
+  /// Área o departamento interno. Nulo = sin área.
+  areaId        String?
+  /// Colegio principal (home tenant) del usuario.
+  institutionId String
+  /// Nulo para funcionarios que sólo acceden vía invitación + PIN.
+  passwordHash  String?  @db.VarChar(255)
+  isActive      Boolean  @default(true)
+  lastLoginAt   DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  institution           Institution            @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  position              Position?              @relation(fields: [positionId], references: [id], onDelete: SetNull)
+  area                  Area?                  @relation(fields: [areaId], references: [id], onDelete: SetNull)
+  /// Colegios adicionales que el usuario puede administrar (SUPER_ADMIN / DIRECTIVO).
+  memberships           InstitutionMembership[]
+  invitations           Invitation[]
+  invitationsSent       Invitation[]           @relation("InvitationCreatedBy")
+  courseProgress        CourseProgress[]
+  lessonProgress        LessonProgress[]
+  submissions           EvaluationSubmission[]
+  reviewedSubmissions   EvaluationSubmission[] @relation("SubmissionReviewer")
+
+  @@unique([institutionId, rut])
+  @@unique([institutionId, email])
+  @@unique([institutionId, corporateEmail])
+  @@index([email])
+  @@index([role])
+  @@index([institutionId, role])
+  @@index([positionId])
+  @@index([areaId])
+  @@map("users")
+}
+
+/// Permite que un usuario (SuperAdmin/Directivo) pertenezca o administre más de
+/// un colegio y alterne entre ellos con el selector global del layout.
+model InstitutionMembership {
+  id            String   @id @default(cuid())
+  userId        String
+  institutionId String
+  /// Rol efectivo dentro de ESE colegio (puede diferir del rol base del usuario).
+  role          Role     @default(ADMIN_RRHH)
+  createdAt     DateTime @default(now())
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, institutionId])
+  @@index([institutionId])
+  @@map("institution_memberships")
+}
+
+// ---------------------------------------------------------------------------
+// CONTENIDOS: CURSOS Y LECCIONES
+// ---------------------------------------------------------------------------
+
+model Course {
+  id            String      @id @default(cuid())
+  institutionId String
+  categoryId    String?
+  /// Tipo del catálogo del colegio (Inducción, Capacitación, …).
+  typeId        String?
+  title         String      @db.VarChar(200)
+  description   String?     @db.Text
+  /// Formato del contenido: un video largo o una serie de cápsulas.
+  videoFormat   VideoFormat @default(FORMATO_LARGO)
+  /// true => las lecciones deben verse en orden (microaprendizaje secuencial).
+  isSequential  Boolean     @default(true)
+  isPublished   Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+
+  institution Institution      @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  category    Category?        @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  type        CourseType?      @relation(fields: [typeId], references: [id], onDelete: SetNull)
+  /// Cargos a los que aplica el curso. Vacío = todos los cargos.
+  targetPositions Position[]   @relation("CourseTargetPositions")
+  tags        Tag[]
+  modules     CourseModule[]
+  lessons     Lesson[]
+  evaluations Evaluation[]
+  invitations Invitation[]
+  progress    CourseProgress[]
+  autoInvitationConfigs AutoInvitationConfig[]
+
+  @@index([institutionId, isPublished])
+  @@index([categoryId])
+  @@index([typeId])
+  @@map("courses")
+}
+
+/// Módulo o Tema que agrupa lecciones/cápsulas dentro de un curso (ej. "Inducción 2026").
+model CourseModule {
+  id          String   @id @default(cuid())
+  courseId    String
+  title       String   @db.VarChar(200)
+  description String?  @db.Text
+  orderIndex  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons     Lesson[]
+
+  @@unique([courseId, orderIndex])
+  @@index([courseId])
+  @@map("course_modules")
+}
+
+model Lesson {
+  id              String   @id @default(cuid())
+  courseId        String
+  moduleId        String?
+  title           String   @db.VarChar(200)
+  description     String?  @db.Text
+  videoUrl        String   @db.VarChar(512)
+  durationSeconds Int      @default(0)
+  orderIndex      Int      @default(0)
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  course     Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  module     CourseModule? @relation(fields: [moduleId], references: [id], onDelete: SetNull)
+  evaluation Evaluation?
+  progress   LessonProgress[]
+
+  @@unique([courseId, orderIndex])
+  @@index([courseId])
+  @@index([courseId, isActive])
+  @@index([moduleId])
+  @@map("lessons")
+}
+
+// ---------------------------------------------------------------------------
+// EVALUACIONES
+// ---------------------------------------------------------------------------
+
+/// Una evaluación cuelga de un curso (evaluación final del módulo) o de una
+/// lección (evaluación al final de cada micro-video). Exactamente uno de los
+/// dos campos debe estar presente; se valida a nivel de aplicación (Zod).
+model Evaluation {
+  id           String   @id @default(cuid())
+  courseId     String?
+  lessonId     String?  @unique
+  title        String   @db.VarChar(200)
+  /// Porcentaje mínimo de aprobación (0-100).
+  passingScore Int      @default(80)
+  maxAttempts  Int      @default(3)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  course      Course?                @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson      Lesson?                @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  questions   Question[]
+  submissions EvaluationSubmission[]
+
+  @@index([courseId])
+  @@map("evaluations")
+}
+
+model Question {
+  id            String       @id @default(cuid())
+  evaluationId  String
+  type          QuestionType @default(MULTIPLE_CHOICE)
+  prompt        String       @db.Text
+  /// Imagen de apoyo del enunciado (URL). Opcional.
+  imageUrl      String?      @db.VarChar(512)
+  /// MULTIPLE_CHOICE: [{ id, text, imageUrl }]. OPEN_TEXT y LIKERT: null.
+  options       Json?
+  /// MULTIPLE_CHOICE: id de la alternativa correcta.
+  /// OPEN_TEXT (revisión manual) y LIKERT (sin respuesta correcta): null.
+  correctAnswer String?      @db.VarChar(500)
+  points        Int          @default(1)
+  orderIndex    Int          @default(0)
+  createdAt     DateTime     @default(now())
+
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+
+  @@unique([evaluationId, orderIndex])
+  @@index([evaluationId])
+  @@map("questions")
+}
+
+// ---------------------------------------------------------------------------
+// INVITACIONES (Token + PIN temporal)
+// ---------------------------------------------------------------------------
+
+model Invitation {
+  id            String   @id @default(cuid())
+  userId        String
+  courseId      String
+  institutionId String
+  /// SHA-256 del token que viaja en el enlace. Nunca se guarda el token plano.
+  tokenHash     String   @unique @db.VarChar(64)
+  /// Hash bcrypt del PIN de 6 dígitos. Nulo si no se requiere PIN para acceder.
+  pinHash       String?  @db.VarChar(255)
+  /// true => exige validar PIN de 6 dígitos; false => enlace directo sin PIN
+  requiresPin   Boolean  @default(true)
+  /// Correo principal al que se despachó la invitación (ej. jefe de área o funcionario)
+  sentToEmail   String?  @db.VarChar(180)
+  /// Correos en copia (CC) separados por coma
+  ccEmails      String?  @db.Text
+  expiresAt     DateTime
+  isUsed        Boolean  @default(false)
+  usedAt        DateTime?
+  /// Intentos fallidos de PIN; a partir de MAX_PIN_ATTEMPTS la invitación se bloquea.
+  attempts      Int      @default(0)
+  createdById   String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  createdBy   User?       @relation("InvitationCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([userId, courseId])
+  @@index([institutionId, isUsed])
+  @@index([expiresAt])
+  @@map("invitations")
+}
+
+// ---------------------------------------------------------------------------
+// PROGRESO Y EVIDENCIA
+// ---------------------------------------------------------------------------
+
+model CourseProgress {
+  id          String         @id @default(cuid())
+  userId      String
+  courseId    String
+  status      ProgressStatus @default(PENDING)
+  /// Puntaje final consolidado (0-100) al aprobar el curso.
+  finalScore  Int?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId])
+  @@index([courseId, status])
+  @@map("course_progress")
+}
+
+model LessonProgress {
+  id             String   @id @default(cuid())
+  userId         String
+  lessonId       String
+  isWatched      Boolean  @default(false)
+  watchedSeconds Int      @default(0)
+  completedAt    DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lesson Lesson @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, lessonId])
+  @@index([lessonId, isWatched])
+  @@map("lesson_progress")
+}
+
+model EvaluationSubmission {
+  id           String           @id @default(cuid())
+  userId       String
+  evaluationId String
+  /// Puntaje porcentual 0-100 de la parte auto-corregible.
+  score        Int              @default(0)
+  /// [{ questionId, answer, isCorrect }] serializado.
+  answers      Json
+  status       SubmissionStatus @default(PENDING_REVIEW)
+  attempt      Int              @default(1)
+  reviewedById String?
+  reviewedAt   DateTime?
+  reviewNotes  String?          @db.Text
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  reviewedBy User?      @relation("SubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, evaluationId, attempt])
+  @@index([evaluationId, status])
+  @@index([userId, createdAt])
+  @@map("evaluation_submissions")
+}
+
+/// Configuración de envío automático diario de invitaciones a nuevos funcionarios por jefatura.
+model AutoInvitationConfig {
+  id             String    @id @default(cuid())
+  institutionId  String    @unique
+  isEnabled      Boolean   @default(false)
+  scheduledTime  String    @default("09:00") @db.VarChar(5)
+  courseId       String?
+  sendToJefe     Boolean   @default(true)
+  customCcEmails String?   @db.VarChar(500)
+  lastRunAt      DateTime?
+  lastRunStatus  String?   @db.VarChar(255)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  institution    Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  course         Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@map("auto_invitation_configs")
+}

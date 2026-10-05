@@ -1,0 +1,45 @@
+# Dependencias
+node_modules
+.pnp
+.pnp.js
+
+# Next.js / build
+.next
+.next-verify
+out
+build
+next-env.d.ts
+*.tsbuildinfo
+
+# Variables de entorno (solo se versiona .env.example)
+.env
+.env.*
+!.env.example
+
+# Archivos subidos por usuarios (se persisten en el volumen Docker)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Documentos internos con credenciales
+CONEXION_OTRAS_APPS.md
+plan.md
+
+# Configuración local de Claude Code
+.claude/settings.local.json
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+*.log
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.pem
+
+# Deploy
+.vercel
