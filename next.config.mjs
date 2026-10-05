@@ -9,6 +9,17 @@ const nextConfig = {
    */
   distDir: process.env.NEXT_DIST_DIR || ".next",
   reactStrictMode: true,
+  /**
+   * Los videos subidos después del build no los entrega `next start` desde
+   * `public/`; se sirven con la ruta /api/videos/[file] manteniendo la URL.
+   */
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: "/uploads/videos/:file", destination: "/api/videos/:file" },
+      ],
+    };
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: "2mb",
