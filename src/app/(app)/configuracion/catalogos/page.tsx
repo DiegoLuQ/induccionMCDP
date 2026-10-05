@@ -4,6 +4,7 @@ import { Briefcase, Building2, GraduationCap } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { getAreas, getCourseTypes, getPositions, getStaffWithoutJefatura } from "@/server/queries/catalog";
 import { getActiveFuncionariosForInstitution } from "@/server/queries/funcionarios";
+import { getInstitution } from "@/server/queries/institutions";
 import {
   createAreaAction,
   createCourseTypeAction,
@@ -26,7 +27,8 @@ export const metadata: Metadata = { title: "Cargos y tipos" };
 export default async function CatalogsPage() {
   const session = await requireRole(Role.SUPER_ADMIN, Role.ADMIN_RRHH);
 
-  const [positions, courseTypes, areas, funcionarios, staffWithoutJefe] = await Promise.all([
+  const [institution, positions, courseTypes, areas, funcionarios, staffWithoutJefe] = await Promise.all([
+    getInstitution(session.institutionId),
     getPositions(session.institutionId),
     getCourseTypes(session.institutionId),
     getAreas(session.institutionId),
@@ -37,15 +39,16 @@ export default async function CatalogsPage() {
   return (
     <>
       <PageHeader
-        title="Catálogos Institucionales"
-        description="Administra los cargos, departamentos/áreas con sus jefaturas y los tipos de inducción o capacitación de tu establecimiento."
+        title={`Catálogos · ${institution?.name ?? "Colegio"}`}
+        description="Cargos, áreas con sus jefaturas y tipos de curso del colegio activo. Para ver los de otro colegio, cámbialo en el selector superior."
       />
 
-      <div className="max-w-4xl">
+      <div className="max-w-4xl" key={`banner-${session.institutionId}`}>
         <StaffWithoutJefaturaBanner staff={staffWithoutJefe} />
       </div>
 
-      <Tabs defaultValue="cargos" className="space-y-6 max-w-4xl">
+      {/* key: al cambiar de colegio se descartan ediciones/expansiones del colegio anterior */}
+      <Tabs key={session.institutionId} defaultValue="cargos" className="space-y-6 max-w-4xl">
         <TabsList className="grid w-full grid-cols-3 h-12 p-1 bg-muted/60">
           <TabsTrigger value="cargos" className="gap-2 text-xs sm:text-sm font-medium py-2">
             <Briefcase className="h-4 w-4 text-primary shrink-0" />

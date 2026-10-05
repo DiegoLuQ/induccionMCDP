@@ -544,12 +544,13 @@ export function CatalogManager({
               </div>
 
               <div>
-                <Label className="text-[11px] text-muted-foreground">Correo Asistente / Secretaría (Copia CC)</Label>
+                <Label className="text-[11px] text-muted-foreground">Correo(s) Asistente / Secretaría (Copia CC)</Label>
                 <Input
                   value={newAsistenteEmail}
-                  type="email"
+                  type="text"
                   onChange={(e) => setNewAsistenteEmail(e.target.value)}
-                  placeholder="asistente@colegio.cl"
+                  placeholder="asistente1@colegio.cl, asistente2@colegio.cl"
+                  title="Puedes ingresar varios correos separados por coma"
                   className="h-8 text-xs mt-1 max-w-sm"
                 />
               </div>
@@ -812,12 +813,13 @@ export function CatalogManager({
                           </div>
 
                           <div>
-                            <Label className="text-[11px] text-muted-foreground">Correo Asistente / Secretaría (Copia CC)</Label>
+                            <Label className="text-[11px] text-muted-foreground">Correo(s) Asistente / Secretaría (Copia CC)</Label>
                             <Input
                               value={draftAsistenteEmail}
-                              type="email"
+                              type="text"
                               onChange={(e) => setDraftAsistenteEmail(e.target.value)}
-                              placeholder="asistente@colegio.cl"
+                              placeholder="asistente1@colegio.cl, asistente2@colegio.cl"
+                              title="Puedes ingresar varios correos separados por coma"
                               className="h-8 text-xs mt-1 max-w-sm"
                             />
                           </div>
