@@ -445,8 +445,26 @@ export async function removeCourseFromUsersAction({
   if (!course) return failure("Curso no encontrado.");
 
   const lessonIds = course.lessons.map((l) => l.id);
+  // Evaluaciones del curso: la final (courseId) y las de cada lección.
+  const evaluations = await prisma.evaluation.findMany({
+    where: { OR: [{ courseId }, { lesson: { courseId } }] },
+    select: { id: true },
+  });
+  const evaluationIds = evaluations.map((e) => e.id);
 
   await prisma.$transaction([
+    // Eliminar respuestas de evaluaciones: sin esto, al reasignar el curso el
+    // funcionario vería "Ya aprobaste" o "Agotaste los intentos".
+    ...(evaluationIds.length > 0
+      ? [
+          prisma.evaluationSubmission.deleteMany({
+            where: {
+              userId: { in: userIds },
+              evaluationId: { in: evaluationIds },
+            },
+          }),
+        ]
+      : []),
     // Eliminar progreso de lecciones asociadas
     ...(lessonIds.length > 0
       ? [
@@ -477,7 +495,7 @@ export async function removeCourseFromUsersAction({
   revalidateUsers();
   return success(
     { removedCount: userIds.length },
-    "Asignación quitada con éxito. El funcionario puede realizar el curso de nuevo.",
+    "Asignación quitada: se eliminaron su avance y sus respuestas. Puede realizar el curso de nuevo.",
   );
 }
 

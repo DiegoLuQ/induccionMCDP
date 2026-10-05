@@ -12,3 +12,4 @@ docker-compose.yml
 .dockerignore
 image.png
 public/uploads/videos/*
+public/uploads/constancias

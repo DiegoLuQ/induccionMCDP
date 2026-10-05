@@ -17,6 +17,9 @@ const nextConfig = {
     return {
       beforeFiles: [
         { source: "/uploads/videos/:file", destination: "/api/videos/:file" },
+        // Las constancias firmadas son privadas: nunca se sirven desde public/
+        // (sólo por /api/constancias-firmadas/[id] con sesión de administrador).
+        { source: "/uploads/constancias/:path*", destination: "/api/constancias-firmadas/no-publico" },
       ],
     };
   },

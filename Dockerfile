@@ -26,7 +26,8 @@ RUN npm run build && npm prune --omit=dev
 # ---------------------------------------------------------------------------
 FROM node:20-bookworm-slim AS runner
 WORKDIR /app
-RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates \
+# ghostscript: optimiza el peso de las constancias firmadas en PDF.
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates ghostscript \
     && rm -rf /var/lib/apt/lists/*
 
 ENV NODE_ENV=production \
@@ -42,7 +43,8 @@ COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.next ./.next
 
 # Los videos subidos se guardan en public/uploads (montado como volumen).
-RUN mkdir -p /app/public/uploads/videos && chown -R node:node /app/public/uploads
+RUN mkdir -p /app/public/uploads/videos /app/public/uploads/constancias \
+    && chown -R node:node /app/public/uploads
 
 USER node
 EXPOSE 3000

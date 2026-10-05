@@ -87,6 +87,7 @@ model Institution {
   courseTypes CourseType[]
   areas       Area[]
   socialLinks InstitutionSocialLink[]
+  signedCertificates SignedCertificate[]
   autoInvitationConfig AutoInvitationConfig?
 
   @@index([isActive])
@@ -264,6 +265,8 @@ model User {
   lessonProgress        LessonProgress[]
   submissions           EvaluationSubmission[]
   reviewedSubmissions   EvaluationSubmission[] @relation("SubmissionReviewer")
+  signedCertificates    SignedCertificate[]
+  uploadedCertificates  SignedCertificate[]    @relation("SignedCertificateUploader")
 
   @@unique([institutionId, rut])
   @@unique([institutionId, email])
@@ -326,6 +329,7 @@ model Course {
   invitations Invitation[]
   progress    CourseProgress[]
   autoInvitationConfigs AutoInvitationConfig[]
+  signedCertificates    SignedCertificate[]
 
   @@index([institutionId, isPublished])
   @@index([categoryId])
@@ -551,4 +555,32 @@ model AutoInvitationConfig {
   course         Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
 
   @@map("auto_invitation_configs")
+}
+
+/// Constancia de participación firmada (PDF o JPG escaneado) que sube RRHH.
+/// Una por funcionario y curso: subir otra reemplaza la anterior.
+model SignedCertificate {
+  id            String   @id @default(cuid())
+  institutionId String
+  userId        String
+  courseId      String
+  /// Nombre del archivo guardado en public/uploads/constancias (no se sirve público).
+  fileName      String   @db.VarChar(255)
+  originalName  String   @db.VarChar(255)
+  mimeType      String   @db.VarChar(60)
+  /// Tamaño guardado (tras optimizar) y original, en bytes.
+  size          Int
+  originalSize  Int
+  uploadedById  String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  institution Institution @relation(fields: [institutionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  uploadedBy  User?       @relation("SignedCertificateUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, courseId])
+  @@index([institutionId])
+  @@map("signed_certificates")
 }
