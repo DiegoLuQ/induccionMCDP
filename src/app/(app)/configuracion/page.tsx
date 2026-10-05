@@ -74,7 +74,7 @@ export default async function InstitutionSettingsPage() {
             <Separator />
             <Row
               label="Correos aceptados"
-              value={`Sólo @${institution.domain}`}
+              value="Cualquier dominio"
             />
           </CardContent>
         </Card>

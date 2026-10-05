@@ -130,7 +130,7 @@ export function InstitutionForm({
           <Field
             id="domain"
             label="Dominio institucional"
-            hint="Sólo se aceptan correos de este dominio"
+            hint="Se usa para el correo institucional y para elegir el remitente"
             placeholder="colegiomacaya.cl"
             error={errors.domain?.message}
             {...register("domain")}

@@ -10,7 +10,6 @@ import {
   invitationExpiryDate,
 } from "@/lib/auth/tokens";
 import { MAX_PIN_ATTEMPTS } from "@/lib/constants";
-import { getEmailDomain } from "@/lib/utils";
 import { sendMail } from "@/lib/mail/mailer";
 import {
   invitationEmail,
@@ -70,7 +69,8 @@ export async function issueInvitations(params: {
     throw new Error("No puedes invitar a un curso que aún no está publicado.");
   }
 
-  const allowedDomain = course.institution.domain.toLowerCase();
+  /** Dominio del colegio: sólo elige la cuenta remitente; el funcionario puede tener cualquier correo. */
+  const institutionDomain = course.institution.domain.toLowerCase();
   const expiresAt = invitationExpiryDate(params.expiresInHours);
   const requiresPin = params.requiresPin ?? true;
 
@@ -78,15 +78,6 @@ export async function issueInvitations(params: {
   const errors: InvitationIssueError[] = [];
 
   for (const invitee of params.invitees) {
-    // Regla multi-tenant: sólo correos del dominio institucional para el funcionario.
-    if (getEmailDomain(invitee.email) !== allowedDomain) {
-      errors.push({
-        email: invitee.email,
-        reason: `El correo debe pertenecer al dominio @${allowedDomain}`,
-      });
-      continue;
-    }
-
     const { token, tokenHash } = generateInvitationToken();
     const pin = requiresPin ? generatePin() : null;
     const pinHash = pin ? await hashSecret(pin) : null;
@@ -190,7 +181,7 @@ export async function issueInvitations(params: {
         emailSent = await sendMail({
           to: targetEmail,
           cc: ccList.length > 0 ? ccList : undefined,
-          institutionDomain: allowedDomain,
+          institutionDomain,
           ...mail,
         });
       }
@@ -259,7 +250,8 @@ export async function issueConsolidatedInvitations(params: {
     throw new Error("No puedes invitar a un curso que aún no está publicado.");
   }
 
-  const allowedDomain = course.institution.domain.toLowerCase();
+  /** Dominio del colegio: sólo elige la cuenta remitente; el funcionario puede tener cualquier correo. */
+  const institutionDomain = course.institution.domain.toLowerCase();
   const expiresAt = invitationExpiryDate(params.expiresInHours);
   const requiresPin = params.requiresPin ?? true;
 
@@ -279,14 +271,6 @@ export async function issueConsolidatedInvitations(params: {
     const consolidatedItems: ConsolidatedFuncionarioItem[] = [];
 
     for (const invitee of group.invitees) {
-      if (getEmailDomain(invitee.email) !== allowedDomain) {
-        groupErrors.push({
-          email: invitee.email,
-          reason: `El correo debe pertenecer al dominio @${allowedDomain}`,
-        });
-        continue;
-      }
-
       const { token, tokenHash } = generateInvitationToken();
       const pin = requiresPin ? generatePin() : null;
       const pinHash = pin ? await hashSecret(pin) : null;
@@ -421,7 +405,7 @@ export async function issueConsolidatedInvitations(params: {
           emailSent = await sendMail({
             to: targetEmail,
             cc: ccList.length > 0 ? ccList : undefined,
-            institutionDomain: allowedDomain,
+            institutionDomain,
             ...mail,
           });
 
@@ -447,7 +431,7 @@ export async function issueConsolidatedInvitations(params: {
 
             const sent = await sendMail({
               to: item.email,
-              institutionDomain: allowedDomain,
+              institutionDomain,
               ...mail,
             });
             item.emailSent = sent;
