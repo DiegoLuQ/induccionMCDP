@@ -103,14 +103,25 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
   function handleDelete() {
     startTransition(async () => {
       const toastId = toast.loading("Eliminando videos...");
-      const result = await deleteOrphanVideosAction(toDelete);
-      if (result.success) {
-        toast.success(result.message || "Videos eliminados.", { id: toastId });
-        setSelected([]);
-        setConfirmOpen(false);
+      try {
+        const result = await deleteOrphanVideosAction(toDelete);
+        if (result.success) {
+          toast.success(result.message || "Videos eliminados.", { id: toastId, duration: 8000 });
+          setSelected([]);
+          setConfirmOpen(false);
+        } else {
+          toast.error(result.message || "No se pudieron eliminar los videos.", {
+            id: toastId,
+            duration: 10000,
+          });
+        }
         router.refresh();
-      } else {
-        toast.error(result.message || "No se pudieron eliminar los videos.", { id: toastId });
+      } catch (error) {
+        console.error("[VideoLibrary] Error al eliminar videos:", error);
+        toast.error(
+          "No se pudo contactar al servidor para eliminar los videos. Recarga la página e inténtalo de nuevo.",
+          { id: toastId, duration: 10000 },
+        );
       }
     });
   }

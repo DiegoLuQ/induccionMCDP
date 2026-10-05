@@ -101,7 +101,12 @@ export async function sendMail(message: MailMessage): Promise<boolean> {
   }
 
   try {
-    await getTransporter(account).sendMail({ from: account.from, ...mail });
+    const info = await getTransporter(account).sendMail({ from: account.from, ...mail });
+    // Destinatarios (Para + CC) que el servidor SMTP aceptó o rechazó realmente.
+    console.info(
+      `[mailer] Enviado "${mail.subject}" desde ${account.user ?? account.from}. ` +
+        `Aceptados: ${JSON.stringify(info.accepted)} Rechazados: ${JSON.stringify(info.rejected)}`,
+    );
     return true;
   } catch (error) {
     console.error("[mailer] Error enviando correo:", error);

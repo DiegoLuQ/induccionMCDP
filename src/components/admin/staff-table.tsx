@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Clock,
   ExternalLink,
+  Eye,
   GraduationCap,
   Mail,
   Pencil,
@@ -49,6 +50,13 @@ import { RemoveCourseModal } from "@/components/admin/remove-course-modal";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Table,
@@ -91,6 +99,9 @@ export function StaffTable({
   } | null>(null);
 
   const [removeModalOpen, setRemoveModalOpen] = useState(false);
+  // Modal con todas las inducciones/capacitaciones de un funcionario
+  const [coursesModalUser, setCoursesModalUser] = useState<StaffDirectoryItem | null>(null);
+
   const [targetUserForRemove, setTargetUserForRemove] = useState<{
     ids: string[];
     summary: string;
@@ -663,86 +674,28 @@ export function StaffTable({
                               Sin inducciones asignadas
                             </span>
                           ) : (
-                            <div className="flex flex-col gap-1 max-h-32 overflow-y-auto pr-1">
-                              {user.courses.map((c) => (
-                                <div
-                                  key={c.courseId}
-                                  className="flex items-center justify-between gap-1.5 rounded-md border bg-background/80 px-2 py-1 text-xs shadow-2xs"
-                                >
-                                  <div className="min-w-0 flex-1">
-                                    <span className="font-medium text-foreground truncate block text-[11px]">
-                                      {c.courseTitle}
-                                    </span>
-                                    <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
-                                      <Video className="h-3 w-3" />
-                                      <span>
-                                        {c.watchedLessons}/{c.totalLessons} videos
-                                      </span>
-                                      {c.finalScore !== null && (
-                                        <span className="font-bold text-foreground ml-1">
-                                          · Nota: {c.finalScore}%
-                                        </span>
-                                      )}
-                                    </div>
-                                  </div>
-
-                                  <div className="shrink-0 flex items-center gap-1">
-                                    {c.status === "COMPLETED" ? (
-                                      <Badge
-                                        variant="default"
-                                        className="h-5 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-0.5 px-1.5"
-                                      >
-                                        <CheckCircle2 className="h-3 w-3" />
-                                        Aprobado
-                                      </Badge>
-                                    ) : c.status === "IN_PROGRESS" ? (
-                                      <Badge
-                                        variant="outline"
-                                        className="h-5 text-[10px] border-amber-500 text-amber-600 bg-amber-50 gap-0.5 px-1.5"
-                                      >
-                                        <Clock className="h-3 w-3" />
-                                        En curso ({c.progressPercent}%)
-                                      </Badge>
-                                    ) : c.status === "FAILED" ? (
-                                      <Badge
-                                        variant="destructive"
-                                        className="h-5 text-[10px] gap-0.5 px-1.5"
-                                      >
-                                        <XCircle className="h-3 w-3" />
-                                        Reprobado
-                                      </Badge>
-                                    ) : (
-                                      <Badge
-                                        variant="secondary"
-                                        className="h-5 text-[10px] gap-0.5 px-1.5"
-                                      >
-                                        Pendiente
-                                      </Badge>
-                                    )}
-
-                                    <Button
-                                      type="button"
-                                      variant="ghost"
-                                      size="sm"
-                                      onClick={() =>
-                                        handleRemoveCourse(
-                                          user.id,
-                                          user.name,
-                                          c.courseId,
-                                          c.courseTitle,
-                                        )
-                                      }
-                                      disabled={isPending}
-                                      title="Quitar asignación y reiniciar progreso para hacerlo de nuevo"
-                                      className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-sm"
-                                    >
-                                      <X className="h-3 w-3" />
-                                      <span className="sr-only">Quitar asignación</span>
-                                    </Button>
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
+                            <>
+                              {user.courses[0] && (
+                                <CourseChip
+                                  course={user.courses[0]}
+                                  disabled={isPending}
+                                  onRemove={(c) =>
+                                    handleRemoveCourse(user.id, user.name, c.courseId, c.courseTitle)
+                                  }
+                                />
+                              )}
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => setCoursesModalUser(user)}
+                                className="h-6 px-2 text-[11px] gap-1 w-full justify-start"
+                                title="Ver todas las inducciones y capacitaciones del funcionario"
+                              >
+                                <Eye className="h-3 w-3" />
+                                Ver {user.courses.length > 1 ? `todas (${user.courses.length})` : "detalle"}
+                              </Button>
+                            </>
                           )}
 
                           {/* Botón rápido para asignar inducción a este funcionario */}
@@ -831,6 +784,45 @@ export function StaffTable({
         />
       )}
 
+      {/* Modal: todas las inducciones / capacitaciones del funcionario */}
+      <Dialog
+        open={coursesModalUser !== null}
+        onOpenChange={(open) => !open && setCoursesModalUser(null)}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <GraduationCap className="h-5 w-5 text-primary" />
+              Inducciones y capacitaciones
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              {coursesModalUser?.name} · {coursesModalUser?.courses.length ?? 0} asignada(s), de la
+              más reciente a la más antigua.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] space-y-1.5 overflow-y-auto pr-1">
+            {coursesModalUser?.courses.map((c) => (
+              <div key={c.courseId}>
+                <CourseChip
+                  course={c}
+                  disabled={isPending}
+                  onRemove={(course) => {
+                    const user = coursesModalUser;
+                    setCoursesModalUser(null);
+                    handleRemoveCourse(user.id, user.name, course.courseId, course.courseTitle);
+                  }}
+                />
+                {c.completedAt && (
+                  <span className="block px-2 pt-0.5 text-[10px] text-muted-foreground" suppressHydrationWarning>
+                    Completado: {formatDateTime(c.completedAt)}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal para Quitar Asignación / Reiniciar */}
       {targetUserForRemove && (
         <RemoveCourseModal
@@ -907,5 +899,87 @@ function SortableHeader({
       {label}
       <Icon className={`h-3.5 w-3.5 ${active ? "" : "opacity-50"}`} />
     </button>
+  );
+}
+
+/** Tarjeta de una inducción/capacitación asignada, con su estado y botón para quitarla. */
+function CourseChip({
+  course: c,
+  disabled,
+  onRemove,
+}: {
+  course: UserCourseItem;
+  disabled: boolean;
+  onRemove: (course: UserCourseItem) => void;
+}) {
+  return (
+    <div
+      className="flex items-center justify-between gap-1.5 rounded-md border bg-background/80 px-2 py-1 text-xs shadow-2xs"
+    >
+      <div className="min-w-0 flex-1">
+        <span className="font-medium text-foreground truncate block text-[11px]">
+          {c.courseTitle}
+        </span>
+        <div className="flex items-center gap-1 text-[10px] text-muted-foreground">
+          <Video className="h-3 w-3" />
+          <span>
+            {c.watchedLessons}/{c.totalLessons} videos
+          </span>
+          {c.finalScore !== null && (
+            <span className="font-bold text-foreground ml-1">
+              · Nota: {c.finalScore}%
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="shrink-0 flex items-center gap-1">
+        {c.status === "COMPLETED" ? (
+          <Badge
+            variant="default"
+            className="h-5 text-[10px] bg-emerald-600 hover:bg-emerald-700 text-white gap-0.5 px-1.5"
+          >
+            <CheckCircle2 className="h-3 w-3" />
+            Aprobado
+          </Badge>
+        ) : c.status === "IN_PROGRESS" ? (
+          <Badge
+            variant="outline"
+            className="h-5 text-[10px] border-amber-500 text-amber-600 bg-amber-50 gap-0.5 px-1.5"
+          >
+            <Clock className="h-3 w-3" />
+            En curso ({c.progressPercent}%)
+          </Badge>
+        ) : c.status === "FAILED" ? (
+          <Badge
+            variant="destructive"
+            className="h-5 text-[10px] gap-0.5 px-1.5"
+          >
+            <XCircle className="h-3 w-3" />
+            Reprobado
+          </Badge>
+        ) : (
+          <Badge
+            variant="secondary"
+            className="h-5 text-[10px] gap-0.5 px-1.5"
+          >
+            Pendiente
+          </Badge>
+        )}
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          onClick={() => onRemove(c)}
+          disabled={disabled}
+          title="Quitar asignación y reiniciar progreso para hacerlo de nuevo"
+          className="h-5 w-5 p-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded-sm"
+        >
+          <X className="h-3 w-3" />
+          <span className="sr-only">Quitar asignación</span>
+        </Button>
+      </div>
+    </div>
   );
 }

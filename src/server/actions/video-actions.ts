@@ -20,7 +20,7 @@ import { getVideoUsageMap } from "@/server/queries/videos";
  */
 export async function deleteOrphanVideosAction(
   filenames: string[],
-): Promise<ActionResult<{ deleted: number; freedBytes: number; skipped: string[] }>> {
+): Promise<ActionResult<{ deleted: number; freedBytes: number; skipped: SkippedVideo[] }>> {
   const session = await getSession();
   if (session?.role !== Role.SUPER_ADMIN) return failure("Sin permisos.");
   if (!Array.isArray(filenames) || filenames.length === 0) {
@@ -31,23 +31,27 @@ export async function deleteOrphanVideosAction(
   const now = Date.now();
   let deleted = 0;
   let freedBytes = 0;
-  const skipped: string[] = [];
+  const skipped: SkippedVideo[] = [];
 
   for (const filename of new Set(filenames)) {
     if (typeof filename !== "string" || !isSafeVideoFilename(filename)) {
-      skipped.push(String(filename));
+      skipped.push({ filename: String(filename), reason: "nombre inválido" });
       continue;
     }
     if (usageMap.has(filename)) {
-      skipped.push(filename);
+      skipped.push({ filename, reason: "está en uso por una lección" });
       continue;
     }
 
     const filePath = path.join(VIDEO_UPLOAD_DIR, filename);
     try {
       const info = await stat(filePath);
-      if (!info.isFile() || now - info.mtimeMs < ORPHAN_VIDEO_MIN_AGE_MS) {
-        skipped.push(filename);
+      if (!info.isFile()) {
+        skipped.push({ filename, reason: "no es un archivo" });
+        continue;
+      }
+      if (now - info.mtimeMs < ORPHAN_VIDEO_MIN_AGE_MS) {
+        skipped.push({ filename, reason: "es reciente" });
         continue;
       }
       await unlink(filePath);
@@ -55,17 +59,39 @@ export async function deleteOrphanVideosAction(
       freedBytes += info.size;
     } catch (error) {
       console.error(`[deleteOrphanVideosAction] No se pudo eliminar ${filename}:`, error);
-      skipped.push(filename);
+      const code = (error as NodeJS.ErrnoException)?.code;
+      skipped.push({
+        filename,
+        reason:
+          code === "ENOENT"
+            ? "ya no existe"
+            : code === "EACCES" || code === "EPERM"
+              ? `sin permiso de escritura en el servidor (${code})`
+              : `error del sistema${code ? ` (${code})` : ""}`,
+      });
     }
   }
 
   revalidatePath("/configuracion/videos");
 
   const freedMb = (freedBytes / (1024 * 1024)).toFixed(1);
+  if (deleted === 0 && skipped.length > 0) {
+    return failure(`No se eliminó ningún video: ${summarizeSkipped(skipped)}.`);
+  }
+
   const message =
     skipped.length > 0
-      ? `Se eliminaron ${deleted} video(s) (${freedMb} MB). ${skipped.length} no se eliminaron porque están en uso, son recientes o no existen.`
+      ? `Se eliminaron ${deleted} video(s) (${freedMb} MB). No se eliminaron ${skipped.length}: ${summarizeSkipped(skipped)}.`
       : `Se eliminaron ${deleted} video(s) y se liberaron ${freedMb} MB.`;
 
   return success({ deleted, freedBytes, skipped }, message);
+}
+
+type SkippedVideo = { filename: string; reason: string };
+
+/** Agrupa los motivos: "2 es reciente; 1 sin permiso de escritura (EACCES)". */
+function summarizeSkipped(skipped: SkippedVideo[]): string {
+  const counts = new Map<string, number>();
+  for (const s of skipped) counts.set(s.reason, (counts.get(s.reason) ?? 0) + 1);
+  return [...counts].map(([reason, n]) => `${n} ${reason}`).join("; ");
 }
