@@ -15,11 +15,13 @@ import { getVideoUsageMap } from "@/server/queries/videos";
 
 /**
  * Elimina videos sin uso de la carpeta de subidas. Vuelve a comprobar en el
- * servidor que ninguna lección los use y que no sean recientes, así que nunca
- * borra un video asignado aunque la vista del navegador esté desactualizada.
+ * servidor que ninguna lección los use, así que nunca borra un video asignado
+ * aunque la vista del navegador esté desactualizada. Los subidos hace menos de
+ * 24 h sólo se borran con `includeRecent` (el administrador lo confirmó).
  */
 export async function deleteOrphanVideosAction(
   filenames: string[],
+  options: { includeRecent?: boolean } = {},
 ): Promise<ActionResult<{ deleted: number; freedBytes: number; skipped: SkippedVideo[] }>> {
   const session = await getSession();
   if (session?.role !== Role.SUPER_ADMIN) return failure("Sin permisos.");
@@ -50,7 +52,8 @@ export async function deleteOrphanVideosAction(
         skipped.push({ filename, reason: "no es un archivo" });
         continue;
       }
-      if (now - info.mtimeMs < ORPHAN_VIDEO_MIN_AGE_MS) {
+      // Los recientes sólo se borran si el administrador lo confirmó explícitamente.
+      if (!options.includeRecent && now - info.mtimeMs < ORPHAN_VIDEO_MIN_AGE_MS) {
         skipped.push({ filename, reason: "es reciente" });
         continue;
       }

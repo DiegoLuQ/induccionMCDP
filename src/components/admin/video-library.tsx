@@ -52,7 +52,7 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
   const [preview, setPreview] = useState<UploadedVideoItem | null>(null);
 
   const deletable = useMemo(
-    () => videos.filter((v) => v.usages.length === 0 && !v.isRecent),
+    () => videos.filter((v) => v.usages.length === 0),
     [videos],
   );
   const stats = useMemo(() => {
@@ -75,7 +75,10 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
     return videos;
   }, [videos, filter]);
 
-  const visibleDeletable = visible.filter((v) => v.usages.length === 0 && !v.isRecent);
+  const visibleDeletable = visible.filter((v) => v.usages.length === 0);
+  // Sueltos subidos hace menos de 24 h: se pueden borrar, pero se advierte
+  // porque podrían pertenecer a un curso que se está editando sin guardar.
+  const recentInDelete = videos.filter((v) => v.isRecent && toDelete.includes(v.filename));
 
   function toggleAllVisible() {
     const names = visibleDeletable.map((v) => v.filename);
@@ -104,7 +107,9 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
     startTransition(async () => {
       const toastId = toast.loading("Eliminando videos...");
       try {
-        const result = await deleteOrphanVideosAction(toDelete);
+        const result = await deleteOrphanVideosAction(toDelete, {
+          includeRecent: recentInDelete.length > 0,
+        });
         if (result.success) {
           toast.success(result.message || "Videos eliminados.", { id: toastId, duration: 8000 });
           setSelected([]);
@@ -234,7 +239,7 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
                 ) : (
                   visible.map((video) => {
                     const isOrphan = video.usages.length === 0;
-                    const canDelete = isOrphan && !video.isRecent;
+                    const canDelete = isOrphan;
                     return (
                       <TableRow key={video.filename}>
                         <TableCell className="px-3 text-center">
@@ -246,10 +251,10 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
                             className="h-4 w-4 cursor-pointer rounded border-gray-300 disabled:cursor-not-allowed disabled:opacity-40"
                             title={
                               canDelete
-                                ? "Seleccionar para eliminar"
-                                : isOrphan
-                                  ? "Subido hace menos de 24 h: aún no se puede eliminar"
-                                  : "En uso por una lección: no se puede eliminar"
+                                ? video.isRecent
+                                  ? "Suelto reciente (menos de 24 h): verifica que no sea de un curso en edición"
+                                  : "Seleccionar para eliminar"
+                                : "En uso por una lección: no se puede eliminar"
                             }
                             aria-label={`Seleccionar ${displayName(video.filename)}`}
                           />
@@ -273,7 +278,7 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
                             video.isRecent ? (
                               <Badge variant="secondary" className="gap-1">
                                 <Clock className="h-3 w-3" />
-                                Reciente (menos de 24 h)
+                                Suelto · reciente (menos de 24 h)
                               </Badge>
                             ) : (
                               <Badge variant="warning">Suelto</Badge>
@@ -343,6 +348,15 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
               del servidor ({formatBytes(toDeleteSize)}). Esta acción no se puede deshacer.
             </DialogDescription>
           </DialogHeader>
+          {recentInDelete.length > 0 && (
+            <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
+              <span>
+                {recentInDelete.length} de estos video(s) se subieron hace menos de 24 horas. Si alguien
+                está creando o editando un curso y aún no lo guarda, ese curso perdería el video.
+              </span>
+            </div>
+          )}
           <ul className="max-h-48 space-y-1 overflow-y-auto rounded-md border p-2 text-xs">
             {toDelete.map((filename) => (
               <li key={filename} className="break-all">
