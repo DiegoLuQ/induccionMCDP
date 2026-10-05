@@ -54,9 +54,13 @@ interface UserFormProps {
   positionsWithSlug: Array<Choice & { slug: string }>;
   /** Sólo un SUPER_ADMIN puede crear roles administrativos. */
   canAssignAdminRoles: boolean;
+  /** Rol preseleccionado en el alta individual. */
+  defaultRole?: Role;
+  /** Página a la que se vuelve tras crear el usuario. */
+  redirectTo?: string;
 }
 
-const NONE = "__ninguno__";
+export const NONE = "__ninguno__";
 
 export function UserForm({
   institutions,
@@ -65,6 +69,8 @@ export function UserForm({
   areas,
   positionsWithSlug,
   canAssignAdminRoles,
+  defaultRole,
+  redirectTo,
 }: UserFormProps) {
   const [tab, setTab] = useState<"single" | "bulk">("single");
 
@@ -96,6 +102,8 @@ export function UserForm({
           positions={positions}
           areas={areas}
           canAssignAdminRoles={canAssignAdminRoles}
+          defaultRole={defaultRole}
+          redirectTo={redirectTo}
         />
       ) : (
         <BulkUserForm
@@ -118,6 +126,8 @@ function SingleUserForm({
   positions,
   areas,
   canAssignAdminRoles,
+  defaultRole = Role.FUNCIONARIO,
+  redirectTo = "/admin/funcionarios",
 }: Omit<UserFormProps, "positionsWithSlug">) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -140,7 +150,7 @@ function SingleUserForm({
       username: "",
       phone: "",
       password: "",
-      role: Role.FUNCIONARIO,
+      role: canAssignAdminRoles ? defaultRole : Role.FUNCIONARIO,
       positionId: "",
       areaId: "",
     },
@@ -172,7 +182,7 @@ function SingleUserForm({
         return;
       }
       toast.success(result.message ?? "Usuario creado.");
-      router.push("/admin/funcionarios");
+      router.push(redirectTo);
       router.refresh();
     });
   }
@@ -522,7 +532,7 @@ function BulkUserForm({
 
 // ---------------------------------------------------------------------------
 
-function CatalogSelect({
+export function CatalogSelect({
   id,
   label,
   value,
@@ -556,7 +566,7 @@ function CatalogSelect({
 }
 
 /** forwardRef obligatorio: react-hook-form inyecta la ref en el input. */
-const Field = forwardRef<
+export const Field = forwardRef<
   HTMLInputElement,
   React.InputHTMLAttributes<HTMLInputElement> & {
     id: string;

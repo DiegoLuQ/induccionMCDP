@@ -5,11 +5,13 @@ import {
   BookOpen,
   Building2,
   ClipboardCheck,
+  ClipboardList,
   GraduationCap,
   LayoutDashboard,
   Mail,
   Settings,
   Tags,
+  UserCog,
   Users,
   Video,
 } from "lucide-react";
@@ -54,6 +56,12 @@ export const NAVIGATION: NavSection[] = [
   {
     title: "Administración",
     items: [
+      {
+        href: "/reportes",
+        label: "Reporte de inducciones",
+        icon: ClipboardList,
+        roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.AUDITOR],
+      },
       {
         href: "/admin",
         label: "Panel RRHH",
@@ -102,6 +110,12 @@ export const NAVIGATION: NavSection[] = [
         roles: [Role.SUPER_ADMIN],
       },
       {
+        href: "/configuracion/usuarios",
+        label: "Usuarios y roles",
+        icon: UserCog,
+        roles: [Role.SUPER_ADMIN],
+      },
+      {
         href: "/configuracion/videos",
         label: "Videos subidos",
         icon: Video,
@@ -139,15 +153,18 @@ export const ROUTE_GUARDS: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/admin", roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH] },
   { prefix: "/configuracion/colegios", roles: [Role.SUPER_ADMIN] },
   { prefix: "/configuracion/videos", roles: [Role.SUPER_ADMIN] },
+  { prefix: "/configuracion/usuarios", roles: [Role.SUPER_ADMIN] },
   { prefix: "/configuracion", roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH] },
   {
     prefix: "/mis-inducciones",
     roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO],
   },
   {
+    // El AUDITOR entra aquí tras el login y se redirige a /reportes.
     prefix: "/dashboard",
-    roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO],
+    roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO, Role.AUDITOR],
   },
+  { prefix: "/reportes", roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.AUDITOR] },
 ];
 
 export function isAdminRole(role: Role): boolean {

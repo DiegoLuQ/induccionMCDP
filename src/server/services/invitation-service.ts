@@ -11,6 +11,7 @@ import {
 } from "@/lib/auth/tokens";
 import { MAX_PIN_ATTEMPTS } from "@/lib/constants";
 import { sendMail } from "@/lib/mail/mailer";
+import { buildCertificateLink } from "@/lib/auth/certificate-token";
 import {
   invitationEmail,
   consolidatedInvitationEmail,
@@ -340,6 +341,10 @@ export async function issueConsolidatedInvitations(params: {
           positionName,
           link,
           pin,
+          certificateUrl: await buildCertificateLink({
+            userId: invitation.user.id,
+            courseId: course.id,
+          }),
         });
       } catch (err) {
         console.error("[consolidated-invitations] Error emitiendo invitación:", err);

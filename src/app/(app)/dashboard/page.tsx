@@ -9,6 +9,8 @@ import {
   MailWarning,
   Users,
 } from "lucide-react";
+import { redirect } from "next/navigation";
+import { Role } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/rbac";
 import { SIN_ASIGNAR } from "@/lib/constants";
@@ -41,6 +43,8 @@ export const metadata: Metadata = { title: "Inicio" };
 
 export default async function DashboardPage() {
   const session = await requireSession();
+  // El auditor no tiene inicio propio: su única vista es el reporte.
+  if (session.role === Role.AUDITOR) redirect("/reportes");
 
   return isAdminRole(session.role) ? (
     <AdminDashboard institutionId={session.institutionId} name={session.name} />

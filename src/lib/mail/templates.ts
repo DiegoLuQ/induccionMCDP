@@ -140,6 +140,8 @@ export interface ConsolidatedFuncionarioItem {
   positionName?: string;
   link: string;
   pin?: string | null;
+  /** Enlace temporal (7 días) para descargar la Constancia de Participación. */
+  certificateUrl?: string | null;
 }
 
 export interface ConsolidatedInvitationMailParams {
@@ -186,6 +188,13 @@ export function consolidatedInvitationEmail(params: ConsolidatedInvitationMailPa
             <a href="${f.link}" style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:11px;font-weight:600;">
               🔗 Copiar Enlace
             </a>
+            ${
+              f.certificateUrl
+                ? `<a href="${f.certificateUrl}" style="display:inline-block;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:11px;font-weight:600;">
+              📄 Descargar constancia
+            </a>`
+                : ""
+            }
           </div>
           <div style="background:#f8fafc;border:1px solid #cbd5e1;padding:6px 8px;border-radius:6px;font-size:10.5px;text-align:left;max-width:270px;margin:0 auto;">
             <div style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">
@@ -245,6 +254,13 @@ export function consolidatedInvitationEmail(params: ConsolidatedInvitationMailPa
         <p style="margin:0;font-size:13px;color:#64748b;">
           ⏰ Estos enlaces tienen vigencia hasta el <strong>${formatCl(params.expiresAt)}</strong>.
         </p>
+        ${
+          params.funcionarios.some((f) => f.certificateUrl)
+            ? `<p style="margin:8px 0 0;font-size:13px;color:#64748b;">
+          📄 Los botones <strong>Descargar constancia</strong> generan la Constancia de Participación en PDF de cada funcionario y están disponibles por <strong>7 días</strong> desde este envío.
+        </p>`
+            : ""
+        }
       </div>
 
       <div style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
@@ -260,7 +276,7 @@ export function consolidatedInvitationEmail(params: ConsolidatedInvitationMailPa
     ``,
     ...params.funcionarios.map(
       (f) =>
-        `* ${f.name} (${f.rut}) - Cargo: ${f.positionName || "N/A"}\n  Enlace: ${f.link}${f.pin ? ` | PIN: ${f.pin}` : ""}`,
+        `* ${f.name} (${f.rut}) - Cargo: ${f.positionName || "N/A"}\n  Enlace: ${f.link}${f.pin ? ` | PIN: ${f.pin}` : ""}${f.certificateUrl ? `\n  Constancia (7 días): ${f.certificateUrl}` : ""}`,
     ),
     ``,
     `Vigencia hasta: ${formatCl(params.expiresAt)}`,

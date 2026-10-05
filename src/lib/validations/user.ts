@@ -106,7 +106,12 @@ export const updateUserSchema = userBaseSchema.partial().extend({
   id: cuidSchema,
   extraInstitutionIds: z.array(cuidSchema).optional(),
   /** Vacío = no cambiar la contraseña. */
-  password: z.string().default(""),
+  password: z
+    .string()
+    .default("")
+    .refine((value) => !value || passwordSchema.safeParse(value).success, {
+      message: "Mínimo 8 caracteres, con al menos una letra y un número",
+    }),
 });
 
 export const toggleUserSchema = z.object({

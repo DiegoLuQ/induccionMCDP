@@ -20,6 +20,8 @@ enum Role {
   SUPER_ADMIN
   ADMIN_RRHH
   FUNCIONARIO
+  /// Sólo lectura: ve el reporte de cumplimiento de inducciones de sus colegios.
+  AUDITOR
 }
 
 // Los cargos (Position) y los tipos de curso (CourseType) dejaron de ser enums

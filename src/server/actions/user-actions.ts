@@ -208,9 +208,15 @@ export async function updateUserAction(input: unknown): Promise<ActionResult> {
 
   const user = await prisma.user.findFirst({
     where: { id, institutionId: session.institutionId },
-    select: { id: true, institutionId: true, role: true },
+    select: { id: true, institutionId: true, role: true, passwordHash: true },
   });
   if (!user) return failure("Usuario no encontrado en este colegio.");
+
+  if (id === session.sub && data.role && data.role !== user.role)
+    return failure("No puedes cambiar tu propio rol.");
+  // Los roles que entran por /login necesitan contraseña.
+  if (data.role && data.role !== Role.FUNCIONARIO && !user.passwordHash && !password)
+    return failure("Para dar un rol con acceso a la plataforma debes definir una contraseña.");
 
   if (data.role && !canAssignRole(session.role, data.role))
     return failure("Sólo un Super Administrador puede asignar roles administrativos.");
