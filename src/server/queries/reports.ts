@@ -25,12 +25,63 @@ export interface ComplianceRow {
   >;
 }
 
+/** Minúsculas, sin tildes y con espacios simples, para comparar nombres y correos. */
+function normalize(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[̀-ͯ]/g, "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function splitList(value: string | null): string[] {
+  return (value ?? "")
+    .split(/[,;\n]+/)
+    .map(normalize)
+    .filter(Boolean);
+}
+
+/**
+ * Áreas del colegio donde el usuario figura como jefatura. La jefatura se
+ * registra como texto (nombre/correo), así que se compara por cualquiera de
+ * sus correos o por su nombre completo.
+ */
+export async function getManagedAreas(
+  institutionId: string,
+  userId: string,
+): Promise<Array<{ id: string; name: string }>> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { name: true, email: true, corporateEmail: true },
+  });
+  if (!user) return [];
+  const emails = [user.email, user.corporateEmail].filter((e): e is string => Boolean(e)).map(normalize);
+  const name = normalize(user.name);
+
+  const areas = await prisma.area.findMany({
+    where: { institutionId },
+    select: { id: true, name: true, jefeEmail: true, jefeNombre: true },
+    orderBy: { name: "asc" },
+  });
+  return areas
+    .filter(
+      (a) =>
+        splitList(a.jefeEmail).some((e) => emails.includes(e)) ||
+        splitList(a.jefeNombre).includes(name),
+    )
+    .map((a) => ({ id: a.id, name: a.name }));
+}
+
 /**
  * Datos de sólo lectura para el reporte de cumplimiento: cursos publicados y
  * funcionarios activos del colegio con su estado en cada curso. No expone
- * tokens, correos ni datos de contacto.
+ * tokens, correos ni datos de contacto. Con `areaIds` se limita a esas áreas.
  */
-export async function getComplianceReport(institutionId: string): Promise<{
+export async function getComplianceReport(
+  institutionId: string,
+  options: { areaIds?: string[] } = {},
+): Promise<{
   courses: ComplianceCourse[];
   rows: ComplianceRow[];
 }> {
@@ -41,7 +92,12 @@ export async function getComplianceReport(institutionId: string): Promise<{
       select: { id: true, title: true, type: { select: { name: true } } },
     }),
     prisma.user.findMany({
-      where: { institutionId, isActive: true, role: Role.FUNCIONARIO },
+      where: {
+        institutionId,
+        isActive: true,
+        role: Role.FUNCIONARIO,
+        ...(options.areaIds ? { areaId: { in: options.areaIds } } : {}),
+      },
       orderBy: { name: "asc" },
       select: {
         id: true,

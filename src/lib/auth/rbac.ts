@@ -50,7 +50,7 @@ export const NAVIGATION: NavSection[] = [
         href: "/mis-inducciones",
         label: "Mis inducciones",
         icon: GraduationCap,
-        roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO],
+        roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO, Role.AUDITOR],
       },
     ],
   },
@@ -164,7 +164,7 @@ export const ROUTE_GUARDS: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/configuracion", roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH] },
   {
     prefix: "/mis-inducciones",
-    roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO],
+    roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO, Role.AUDITOR],
   },
   {
     // El AUDITOR entra aquí tras el login y se redirige a /reportes.
