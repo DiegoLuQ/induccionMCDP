@@ -456,7 +456,7 @@ function SignedCertificateCell({
   return (
     <div className="flex flex-wrap items-center gap-1">
       <Button asChild variant="outline" size="sm" className="h-7 gap-1 px-2 text-[11px]" title="Descargar constancia de participación para imprimir y firmar">
-        <a href={downloadUrl}>
+        <a href={downloadUrl} target="_blank" rel="noreferrer">
           <FileDown className="h-3.5 w-3.5" />
           Constancia
         </a>

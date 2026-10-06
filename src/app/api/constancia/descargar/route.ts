@@ -40,7 +40,8 @@ export async function GET(request: NextRequest) {
   return new NextResponse(new Uint8Array(pdf), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="constancia.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}.pdf`,
+      // inline: se abre en el visor del navegador (desde ahí se descarga o imprime).
+      "Content-Disposition": `inline; filename="constancia.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}.pdf`,
       "Cache-Control": "private, no-store",
     },
   });

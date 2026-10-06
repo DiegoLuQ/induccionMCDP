@@ -979,7 +979,11 @@ function CourseChip({
           title="Descargar constancia de participación (PDF para firmar)"
           className="h-5 w-5 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-500/10 rounded-sm"
         >
-          <a href={`/api/constancia/descargar?userId=${userId}&courseId=${c.courseId}`}>
+          <a
+            href={`/api/constancia/descargar?userId=${userId}&courseId=${c.courseId}`}
+            target="_blank"
+            rel="noreferrer"
+          >
             <FileDown className="h-3 w-3" />
             <span className="sr-only">Descargar constancia</span>
           </a>
