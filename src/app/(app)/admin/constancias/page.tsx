@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { listOrphanSignedFiles } from "@/server/services/signed-certificate-files";
 import { PageHeader } from "@/components/shared/page-header";
 import { SignedCertificatesManager } from "@/components/admin/signed-certificates-manager";
 
@@ -16,7 +17,7 @@ export default async function SignedCertificatesPage() {
     prisma.course.findMany({
       where: { institutionId },
       orderBy: { createdAt: "desc" },
-      select: { id: true, title: true },
+      select: { id: true, title: true, isPublished: true },
     }),
     prisma.user.findMany({
       where: { institutionId, role: Role.FUNCIONARIO },
@@ -47,6 +48,15 @@ export default async function SignedCertificatesPage() {
     }),
   ]);
 
+  // Archivos sin registro (p. ej. de un curso o funcionario eliminado): sólo
+  // SUPER_ADMIN, porque la carpeta es compartida por todos los colegios.
+  const isSuperAdmin = session.role === Role.SUPER_ADMIN;
+  const orphans = isSuperAdmin
+    ? await listOrphanSignedFiles(
+        new Set((await prisma.signedCertificate.findMany({ select: { fileName: true } })).map((r) => r.fileName)),
+      )
+    : [];
+
   return (
     <>
       <PageHeader
@@ -55,6 +65,8 @@ export default async function SignedCertificatesPage() {
       />
       <SignedCertificatesManager
         key={institutionId}
+        canManageOrphans={isSuperAdmin}
+        orphans={orphans}
         courses={courses}
         users={users.map((u) => ({
           id: u.id,

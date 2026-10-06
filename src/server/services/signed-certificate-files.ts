@@ -2,7 +2,7 @@ import "server-only";
 
 import { execFile } from "child_process";
 import { randomUUID } from "crypto";
-import { mkdir, readFile, rm, unlink, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile, rm, stat, unlink, writeFile } from "fs/promises";
 import os from "os";
 import path from "path";
 import { promisify } from "util";
@@ -112,4 +112,42 @@ export async function deleteSignedCertificateFile(fileName: string): Promise<voi
 
 export function signedCertificatePath(fileName: string): string | null {
   return fileName === path.basename(fileName) ? path.join(SIGNED_CERT_DIR, fileName) : null;
+}
+
+export interface OrphanSignedFile {
+  fileName: string;
+  isPdf: boolean;
+  size: number;
+  modifiedAt: Date;
+}
+
+/**
+ * Archivos de la carpeta de constancias que ningún registro usa (p. ej. tras
+ * eliminar un curso o un funcionario, cuyo registro se borra en cascada).
+ * Se compara contra TODOS los colegios porque la carpeta es compartida.
+ */
+export async function listOrphanSignedFiles(referenced: Set<string>): Promise<OrphanSignedFile[]> {
+  let names: string[] = [];
+  try {
+    names = await readdir(SIGNED_CERT_DIR);
+  } catch {
+    return [];
+  }
+  const orphans: OrphanSignedFile[] = [];
+  for (const fileName of names) {
+    if (fileName.startsWith(".") || referenced.has(fileName)) continue;
+    try {
+      const info = await stat(path.join(SIGNED_CERT_DIR, fileName));
+      if (!info.isFile()) continue;
+      orphans.push({
+        fileName,
+        isPdf: fileName.toLowerCase().endsWith(".pdf"),
+        size: info.size,
+        modifiedAt: info.mtime,
+      });
+    } catch {
+      // Eliminado entre readdir y stat.
+    }
+  }
+  return orphans.sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime());
 }

@@ -6,7 +6,10 @@ import { Download, Eye, FileCheck2, Search, Trash2, Upload, UserRound } from "lu
 import { toast } from "sonner";
 import { formatDateTime } from "@/lib/utils";
 import { formatRut } from "@/lib/rut";
-import { deleteSignedCertificateAction } from "@/server/actions/signed-certificate-actions";
+import {
+  deleteOrphanSignedFilesAction,
+  deleteSignedCertificateAction,
+} from "@/server/actions/signed-certificate-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +35,17 @@ type ProgressStatus = "PENDING" | "IN_PROGRESS" | "COMPLETED" | "FAILED";
 interface CourseOption {
   id: string;
   title: string;
+  isPublished: boolean;
 }
+
+interface OrphanFile {
+  fileName: string;
+  isPdf: boolean;
+  size: number;
+  modifiedAt: Date;
+}
+
+const ALL_COURSES = "__todas__";
 
 interface StaffOption {
   id: string;
@@ -84,10 +97,14 @@ export function SignedCertificatesManager({
   courses,
   users,
   certificates,
+  orphans,
+  canManageOrphans,
 }: {
   courses: CourseOption[];
   users: StaffOption[];
   certificates: SignedCertificateItem[];
+  orphans: OrphanFile[];
+  canManageOrphans: boolean;
 }) {
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -96,6 +113,9 @@ export function SignedCertificatesManager({
   const [extraCourseId, setExtraCourseId] = useState("");
   const [uploadingKey, setUploadingKey] = useState<string | null>(null);
   const [listSearch, setListSearch] = useState("");
+  const [listCourseId, setListCourseId] = useState(ALL_COURSES);
+  const [selectedOrphans, setSelectedOrphans] = useState<string[]>([]);
+  const topRef = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const uploadTarget = useRef<{ userId: string; courseId: string } | null>(null);
 
@@ -126,14 +146,36 @@ export function SignedCertificatesManager({
       certificates.filter((c) => {
         const user = userById.get(c.userId);
         const course = courseById.get(c.courseId);
+        if (listCourseId !== ALL_COURSES && c.courseId !== listCourseId) return false;
         if (!listSearch.trim()) return true;
         const q = listSearch.trim().toLowerCase();
         return (
           (user && matches(user, listSearch)) || course?.title.toLowerCase().includes(q)
         );
       }),
-    [certificates, listSearch, userById, courseById],
+    [certificates, listSearch, listCourseId, userById, courseById],
   );
+
+  /** Abre el historial del funcionario (todas sus inducciones y constancias). */
+  function showHistory(userId: string) {
+    setSelectedUserId(userId);
+    topRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  function removeOrphans(fileNames: string[]) {
+    if (fileNames.length === 0) return;
+    if (!window.confirm(`¿Eliminar ${fileNames.length} archivo(s) suelto(s) del servidor? No se puede deshacer.`)) return;
+    startTransition(async () => {
+      const result = await deleteOrphanSignedFilesAction(fileNames);
+      if (result.success) {
+        toast.success(result.message ?? "Archivos eliminados.");
+        setSelectedOrphans([]);
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    });
+  }
 
   function pickFile(userId: string, courseId: string) {
     uploadTarget.current = { userId, courseId };
@@ -226,6 +268,7 @@ export function SignedCertificatesManager({
 
   return (
     <div className="max-w-5xl space-y-6">
+      <div ref={topRef} />
       <input ref={fileInput} type="file" accept={ACCEPT} className="hidden" onChange={onFileChosen} />
 
       {/* 1. Buscar funcionario */}
@@ -301,7 +344,12 @@ export function SignedCertificatesManager({
                     className="flex flex-col gap-2 rounded-md border bg-background p-3 sm:flex-row sm:items-center sm:justify-between"
                   >
                     <div className="min-w-0">
-                      <span className="block text-sm font-medium">{course?.title}</span>
+                      <span className="block text-sm font-medium">
+                        {course?.title}
+                        {course && !course.isPublished && (
+                          <Badge variant="secondary" className="ml-2 text-[10px]">No publicada</Badge>
+                        )}
+                      </span>
                       <span className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
                         {status ? STATUS_LABELS[status] : "No asignada"}
                         {cert ? (
@@ -367,14 +415,31 @@ export function SignedCertificatesManager({
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <CardTitle className="text-base">Constancias subidas ({certificates.length})</CardTitle>
-            <CardDescription>Del colegio activo, de la más reciente a la más antigua.</CardDescription>
+            <CardDescription>
+              Del colegio activo, cada una asociada a su inducción. Haz clic en un funcionario para ver su historial.
+            </CardDescription>
           </div>
-          <Input
-            value={listSearch}
-            onChange={(e) => setListSearch(e.target.value)}
-            placeholder="Filtrar por funcionario, RUT o curso"
-            className="sm:w-72"
-          />
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Select value={listCourseId} onValueChange={setListCourseId}>
+              <SelectTrigger className="sm:w-56">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value={ALL_COURSES}>Todas las inducciones</SelectItem>
+                {courses.map((c) => (
+                  <SelectItem key={c.id} value={c.id}>
+                    {c.title}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Input
+              value={listSearch}
+              onChange={(e) => setListSearch(e.target.value)}
+              placeholder="Filtrar por funcionario o RUT"
+              className="sm:w-60"
+            />
+          </div>
         </CardHeader>
         <CardContent className="px-0 pb-0">
           <div className="overflow-x-auto">
@@ -401,7 +466,14 @@ export function SignedCertificatesManager({
                     return (
                       <TableRow key={cert.id}>
                         <TableCell>
-                          <span className="block font-medium">{user?.name ?? "—"}</span>
+                          <button
+                            type="button"
+                            onClick={() => user && showHistory(user.id)}
+                            className="block text-left font-medium hover:underline"
+                            title="Ver historial de constancias de este funcionario"
+                          >
+                            {user?.name ?? "—"}
+                          </button>
                           <span className="block text-xs text-muted-foreground">
                             {user ? formatRut(user.rut) : ""}
                           </span>
@@ -433,6 +505,113 @@ export function SignedCertificatesManager({
           </div>
         </CardContent>
       </Card>
+
+      {/* 4. Archivos sueltos (sólo SUPER_ADMIN) */}
+      {canManageOrphans && (
+        <Card>
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <CardTitle className="text-base">Archivos sueltos ({orphans.length})</CardTitle>
+              <CardDescription>
+                Archivos en el servidor sin constancia asociada (por ejemplo, de un curso o funcionario
+                eliminado). Revísalos y elimínalos manualmente.
+              </CardDescription>
+            </div>
+            <Button
+              variant="destructive"
+              size="sm"
+              className="gap-1.5"
+              disabled={isPending || selectedOrphans.length === 0}
+              onClick={() => removeOrphans(selectedOrphans)}
+            >
+              <Trash2 className="h-4 w-4" />
+              Eliminar seleccionados ({selectedOrphans.length})
+            </Button>
+          </CardHeader>
+          <CardContent className="px-0 pb-0">
+            {orphans.length === 0 ? (
+              <p className="px-6 pb-6 text-sm text-muted-foreground">No hay archivos sueltos.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <Table>
+                  <TableHeader className="bg-muted/40">
+                    <TableRow>
+                      <TableHead className="w-10 px-3 text-center">
+                        <input
+                          type="checkbox"
+                          checked={selectedOrphans.length === orphans.length}
+                          onChange={() =>
+                            setSelectedOrphans(
+                              selectedOrphans.length === orphans.length ? [] : orphans.map((o) => o.fileName),
+                            )
+                          }
+                          className="h-4 w-4 cursor-pointer rounded border-gray-300"
+                          aria-label="Seleccionar todos los archivos sueltos"
+                        />
+                      </TableHead>
+                      <TableHead>Archivo</TableHead>
+                      <TableHead className="w-32">Tamaño</TableHead>
+                      <TableHead className="w-44">Fecha</TableHead>
+                      <TableHead className="w-28 text-right pr-4">Acciones</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {orphans.map((orphan) => (
+                      <TableRow key={orphan.fileName}>
+                        <TableCell className="px-3 text-center">
+                          <input
+                            type="checkbox"
+                            checked={selectedOrphans.includes(orphan.fileName)}
+                            onChange={() =>
+                              setSelectedOrphans((prev) =>
+                                prev.includes(orphan.fileName)
+                                  ? prev.filter((f) => f !== orphan.fileName)
+                                  : [...prev, orphan.fileName],
+                              )
+                            }
+                            className="h-4 w-4 cursor-pointer rounded border-gray-300"
+                            aria-label={`Seleccionar ${orphan.fileName}`}
+                          />
+                        </TableCell>
+                        <TableCell className="font-mono text-xs">{orphan.fileName}</TableCell>
+                        <TableCell className="text-xs">
+                          {orphan.isPdf ? "PDF" : "JPG"} · {formatBytes(orphan.size)}
+                        </TableCell>
+                        <TableCell className="text-xs text-muted-foreground" suppressHydrationWarning>
+                          {formatDateTime(orphan.modifiedAt)}
+                        </TableCell>
+                        <TableCell className="pr-4">
+                          <div className="flex items-center justify-end gap-1">
+                            <Button asChild variant="ghost" size="sm" className="h-8 w-8 p-0" title="Ver">
+                              <a
+                                href={`/api/constancias-firmadas/sueltos/${encodeURIComponent(orphan.fileName)}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </a>
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-8 w-8 p-0 text-destructive hover:text-destructive"
+                              title="Eliminar del servidor"
+                              disabled={isPending}
+                              onClick={() => removeOrphans([orphan.fileName])}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }
