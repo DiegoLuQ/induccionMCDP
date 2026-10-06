@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Role } from "@prisma/client";
 import { requireRole } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { STAFF_ROLES } from "@/lib/auth/rbac";
 import { listOrphanSignedFiles } from "@/server/services/signed-certificate-files";
 import { PageHeader } from "@/components/shared/page-header";
 import { SignedCertificatesManager } from "@/components/admin/signed-certificates-manager";
@@ -20,7 +21,7 @@ export default async function SignedCertificatesPage() {
       select: { id: true, title: true, isPublished: true },
     }),
     prisma.user.findMany({
-      where: { institutionId, role: Role.FUNCIONARIO },
+      where: { institutionId, role: { in: STAFF_ROLES } },
       orderBy: { name: "asc" },
       select: {
         id: true,

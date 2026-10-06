@@ -2,6 +2,7 @@ import "server-only";
 
 import { cache } from "react";
 import { prisma } from "@/lib/prisma";
+import { STAFF_ROLES } from "@/lib/auth/rbac";
 
 /** Cargos del colegio. `activeOnly` para los selectores de formularios. */
 export const getPositions = cache(
@@ -67,7 +68,7 @@ export const getStaffWithoutJefatura = cache(
       where: {
         institutionId,
         isActive: true,
-        role: "FUNCIONARIO",
+        role: { in: STAFF_ROLES },
         OR: [
           { areaId: null },
           { area: { OR: [{ jefeNombre: null }, { jefeNombre: "" }] } },

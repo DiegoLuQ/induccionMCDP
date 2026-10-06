@@ -2,6 +2,7 @@ import "server-only";
 
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { STAFF_ROLES } from "@/lib/auth/rbac";
 
 export type ComplianceStatus = "COMPLETED" | "IN_PROGRESS" | "PENDING" | "FAILED" | "NOT_ASSIGNED";
 
@@ -97,7 +98,7 @@ export async function getComplianceReport(
       where: {
         institutionId,
         isActive: true,
-        role: Role.FUNCIONARIO,
+        role: { in: STAFF_ROLES },
         ...(options.areaIds ? { areaId: { in: options.areaIds } } : {}),
       },
       orderBy: { name: "asc" },

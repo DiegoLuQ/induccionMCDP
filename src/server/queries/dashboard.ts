@@ -4,6 +4,7 @@ import { cache } from "react";
 import { ProgressStatus, QuestionType, SubmissionStatus } from "@prisma/client";
 import { LIKERT_SCALE } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
+import { STAFF_ROLES } from "@/lib/auth/rbac";
 
 /** KPIs y monitoreo en tiempo real para RRHH. */
 export const getAdminDashboard = cache(async (institutionId: string) => {
@@ -72,7 +73,7 @@ export const getAdminDashboard = cache(async (institutionId: string) => {
       where: {
         institutionId,
         isActive: true,
-        role: "FUNCIONARIO",
+        role: { in: STAFF_ROLES },
         NOT: {
           courseProgress: {
             some: {
@@ -86,7 +87,7 @@ export const getAdminDashboard = cache(async (institutionId: string) => {
       where: {
         institutionId,
         isActive: true,
-        role: "FUNCIONARIO",
+        role: { in: STAFF_ROLES },
         NOT: {
           courseProgress: {
             some: {

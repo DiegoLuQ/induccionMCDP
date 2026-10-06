@@ -1,6 +1,7 @@
 import "server-only";
 
 import { prisma } from "@/lib/prisma";
+import { STAFF_ROLES } from "@/lib/auth/rbac";
 import { getAreas } from "@/server/queries/catalog";
 import {
   issueConsolidatedInvitations,
@@ -297,7 +298,7 @@ export async function executeAutoInvitations(
     where: {
       institutionId,
       isActive: true,
-      role: Role.FUNCIONARIO,
+      role: { in: STAFF_ROLES },
       // No debe tener progreso en este curso
       courseProgress: {
         none: {

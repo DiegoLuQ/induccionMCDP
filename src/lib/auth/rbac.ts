@@ -174,6 +174,13 @@ export const ROUTE_GUARDS: Array<{ prefix: string; roles: Role[] }> = [
   { prefix: "/reportes", roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.AUDITOR] },
 ];
 
+/**
+ * Roles que forman parte del personal del colegio (hacen inducciones y
+ * aparecen en reportes). El AUDITOR puede ser además un funcionario con área
+ * y cargo, por eso cuenta como personal.
+ */
+export const STAFF_ROLES: Role[] = [Role.FUNCIONARIO, Role.AUDITOR];
+
 export function isAdminRole(role: Role): boolean {
   return role === Role.SUPER_ADMIN || role === Role.ADMIN_RRHH;
 }

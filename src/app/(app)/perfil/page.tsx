@@ -4,7 +4,9 @@ import { ROLE_LABELS, SIN_ASIGNAR } from "@/lib/constants";
 import { formatDateTime } from "@/lib/utils";
 import { formatRut } from "@/lib/rut";
 import { PageHeader } from "@/components/shared/page-header";
+import { isAdminRole } from "@/lib/auth/rbac";
 import { ChangePasswordForm } from "./change-password-form";
+import { ProfileForm } from "./profile-form";
 import {
   Card,
   CardContent,
@@ -33,7 +35,7 @@ export default async function ProfilePage() {
             <Separator />
             <Row label="RUT" value={user ? formatRut(user.rut) : "—"} />
             <Separator />
-            <Row label="Correo" value={session.email} />
+            <Row label="Correo" value={user ? user.corporateEmail || user.email : session.email} />
             <Separator />
             <Row label="Rol" value={ROLE_LABELS[session.role]} />
             <Separator />
@@ -50,6 +52,16 @@ export default async function ProfilePage() {
             />
           </CardContent>
         </Card>
+
+        {user && (
+          <ProfileForm
+            rut={user.rut}
+            email={user.email}
+            corporateEmail={user.corporateEmail}
+            institutionDomain={user.institution.domain}
+            canEditRut={isAdminRole(session.role)}
+          />
+        )}
 
         {user?.passwordHash ? (
           <ChangePasswordForm />
