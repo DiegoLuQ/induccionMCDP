@@ -154,6 +154,20 @@ export interface ConsolidatedInvitationMailParams {
   expiresAt: Date;
 }
 
+/**
+ * Botón compatible con clientes de correo (Outlook, Gmail, apps móviles):
+ * tabla con fondo en la celda y enlace en bloque, sin flexbox.
+ */
+function emailButton(href: string, label: string, background: string, color: string, border: string): string {
+  return `<table role="presentation" cellspacing="0" cellpadding="0" border="0" align="center" style="margin:0 auto 6px;border-collapse:separate;">
+    <tr>
+      <td bgcolor="${background}" style="background:${background};border:1px solid ${border};border-radius:6px;">
+        <a href="${href}" target="_blank" style="display:block;padding:8px 14px;font-size:12px;font-weight:600;color:${color};text-decoration:none;white-space:nowrap;">${label}</a>
+      </td>
+    </tr>
+  </table>`;
+}
+
 export function consolidatedInvitationEmail(params: ConsolidatedInvitationMailParams): {
   subject: string;
   html: string;
@@ -181,29 +195,16 @@ export function consolidatedInvitationEmail(params: ConsolidatedInvitationMailPa
           }
         </td>
         <td style="padding:12px 14px;text-align:center;min-width:220px;">
-          <div style="display:flex;justify-content:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;">
-            <a href="${f.link}" style="display:inline-block;background:#0f172a;color:#ffffff;text-decoration:none;padding:7px 14px;border-radius:6px;font-size:11px;font-weight:600;">
-              Abrir Inducción
-            </a>
-            <a href="${f.link}" style="display:inline-block;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:11px;font-weight:600;">
-              🔗 Copiar Enlace
-            </a>
-            ${
-              f.certificateUrl
-                ? `<a href="${f.certificateUrl}" style="display:inline-block;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;text-decoration:none;padding:7px 12px;border-radius:6px;font-size:11px;font-weight:600;">
-              📄 Descargar constancia
-            </a>`
-                : ""
-            }
-          </div>
-          <div style="background:#f8fafc;border:1px solid #cbd5e1;padding:6px 8px;border-radius:6px;font-size:10.5px;text-align:left;max-width:270px;margin:0 auto;">
-            <div style="font-size:10px;font-weight:700;color:#0284c7;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">
-              📋 Enlace para compartir:
-            </div>
-            <a href="${f.link}" style="font-family:ui-monospace,monospace;font-size:10px;color:#2563eb;word-break:break-all;text-decoration:underline;display:block;">
-              ${f.link}
-            </a>
-          </div>
+          ${emailButton(f.link, "Abrir inducción", "#0f172a", "#ffffff", "#0f172a")}
+          ${
+            f.certificateUrl
+              ? emailButton(f.certificateUrl, "Descargar constancia (PDF)", "#ecfdf5", "#047857", "#a7f3d0")
+              : ""
+          }
+          <p style="margin:6px 0 0;font-size:10px;line-height:1.4;color:#64748b;text-align:left;">
+            Enlace para compartir con el funcionario:<br/>
+            <a href="${f.link}" style="font-family:monospace;color:#2563eb;word-break:break-all;">${f.link}</a>
+          </p>
         </td>
       </tr>
     `,

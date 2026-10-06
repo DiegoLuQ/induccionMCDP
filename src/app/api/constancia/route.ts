@@ -71,7 +71,7 @@ export async function GET(request: NextRequest) {
       status: 200,
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `attachment; filename="constancia.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}.pdf`,
+        "Content-Disposition": `inline; filename="constancia.pdf"; filename*=UTF-8''${encodeURIComponent(filename)}.pdf`,
         "Cache-Control": "private, no-store",
       },
     });

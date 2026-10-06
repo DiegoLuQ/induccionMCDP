@@ -15,6 +15,7 @@ import {
   Clock,
   ExternalLink,
   Eye,
+  FileDown,
   GraduationCap,
   Mail,
   Pencil,
@@ -678,6 +679,7 @@ export function StaffTable({
                               {user.courses[0] && (
                                 <CourseChip
                                   course={user.courses[0]}
+                                  userId={user.id}
                                   disabled={isPending}
                                   onRemove={(c) =>
                                     handleRemoveCourse(user.id, user.name, c.courseId, c.courseTitle)
@@ -805,6 +807,7 @@ export function StaffTable({
               <div key={c.courseId}>
                 <CourseChip
                   course={c}
+                  userId={coursesModalUser.id}
                   disabled={isPending}
                   onRemove={(course) => {
                     const user = coursesModalUser;
@@ -905,10 +908,12 @@ function SortableHeader({
 /** Tarjeta de una inducción/capacitación asignada, con su estado y botón para quitarla. */
 function CourseChip({
   course: c,
+  userId,
   disabled,
   onRemove,
 }: {
   course: UserCourseItem;
+  userId: string;
   disabled: boolean;
   onRemove: (course: UserCourseItem) => void;
 }) {
@@ -966,6 +971,19 @@ function CourseChip({
             Pendiente
           </Badge>
         )}
+
+        <Button
+          asChild
+          variant="ghost"
+          size="sm"
+          title="Descargar constancia de participación (PDF para firmar)"
+          className="h-5 w-5 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-500/10 rounded-sm"
+        >
+          <a href={`/api/constancia/descargar?userId=${userId}&courseId=${c.courseId}`}>
+            <FileDown className="h-3 w-3" />
+            <span className="sr-only">Descargar constancia</span>
+          </a>
+        </Button>
 
         <Button
           type="button"
