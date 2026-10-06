@@ -15,6 +15,7 @@ services:
       - VIRTUAL_HOST=${DOMAIN}
       - VIRTUAL_PORT=3000
       - LETSENCRYPT_HOST=${DOMAIN}
+      - LETSENCRYPT_EMAIL=${LETSENCRYPT_EMAIL}
     # Persiste los videos subidos entre reconstrucciones del contenedor.
     volumes:
       - induccion_uploads:/app/public/uploads

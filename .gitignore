@@ -43,3 +43,6 @@ Thumbs.db
 
 # Deploy
 .vercel
+
+# Notas con credenciales de otros proyectos
+ayuda_letsencrypt.md
