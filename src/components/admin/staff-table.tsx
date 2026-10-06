@@ -15,7 +15,6 @@ import {
   Clock,
   ExternalLink,
   Eye,
-  FileDown,
   GraduationCap,
   Mail,
   Pencil,
@@ -731,6 +730,32 @@ export function StaffTable({
                       {/* Acciones por fila */}
                       <TableCell className="text-right pr-3">
                         <div className="flex items-center justify-end gap-1">
+                          {(() => {
+                            // Constancia de su inducción más reciente; si no tiene ninguna
+                            // asignada, la de la inducción publicada del colegio (no es
+                            // necesario haberla realizado).
+                            const course = user.courses[0]
+                              ? { id: user.courses[0].courseId, title: user.courses[0].courseTitle }
+                              : availableCourses[0]
+                                ? { id: availableCourses[0].id, title: availableCourses[0].title }
+                                : null;
+                            return course ? (
+                              <ConstanciaDownloadButton
+                                userId={user.id}
+                                courseId={course.id}
+                                fileLabel={`${user.name} - ${course.title}`}
+                                className="h-7 w-7 text-base"
+                                title={`Descargar constancia: ${course.title}`}
+                              />
+                            ) : (
+                              <span
+                                className="inline-flex h-7 w-7 items-center justify-center text-base opacity-30 grayscale"
+                                title="El colegio no tiene inducciones publicadas"
+                              >
+                                ⬇️
+                              </span>
+                            );
+                          })()}
                           <Button
                             type="button"
                             variant="ghost"
@@ -972,22 +997,12 @@ function CourseChip({
           </Badge>
         )}
 
-        <Button
-          asChild
-          variant="ghost"
-          size="sm"
-          title="Descargar constancia de participación (PDF para firmar)"
-          className="h-5 w-5 p-0 text-muted-foreground hover:text-emerald-700 hover:bg-emerald-500/10 rounded-sm"
-        >
-          <a
-            href={`/api/constancia/descargar?userId=${userId}&courseId=${c.courseId}`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            <FileDown className="h-3 w-3" />
-            <span className="sr-only">Descargar constancia</span>
-          </a>
-        </Button>
+        <ConstanciaDownloadButton
+          userId={userId}
+          courseId={c.courseId}
+          fileLabel={c.courseTitle}
+          className="h-5 w-5 text-xs"
+        />
 
         <Button
           type="button"
@@ -1003,5 +1018,64 @@ function CourseChip({
         </Button>
       </div>
     </div>
+  );
+}
+
+/**
+ * Descarga directa (sin abrir pestañas) de la constancia de participación:
+ * se pide el PDF y se guarda como archivo en el equipo.
+ */
+function ConstanciaDownloadButton({
+  userId,
+  courseId,
+  fileLabel,
+  className,
+  title = "Descargar constancia de participación (PDF)",
+}: {
+  userId: string;
+  courseId: string;
+  fileLabel: string;
+  className?: string;
+  title?: string;
+}) {
+  const [busy, setBusy] = useState(false);
+
+  async function download() {
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `/api/constancia/descargar?userId=${encodeURIComponent(userId)}&courseId=${encodeURIComponent(courseId)}`,
+      );
+      const blob = await response.blob();
+      if (!response.ok || blob.type !== "application/pdf") {
+        toast.error("No se pudo generar la constancia.");
+        return;
+      }
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Constancia - ${fileLabel}`.replace(/[/\\?%*:|"<>]/g, "").trim() + ".pdf";
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch {
+      toast.error("Error de conexión al descargar la constancia.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={download}
+      disabled={busy}
+      title={title}
+      aria-label={title}
+      className={`inline-flex items-center justify-center rounded-sm hover:bg-emerald-500/10 disabled:opacity-50 ${className ?? ""}`}
+    >
+      {busy ? "⏳" : "⬇️"}
+    </button>
   );
 }
