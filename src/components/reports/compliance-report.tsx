@@ -1,7 +1,20 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { CheckCircle2, Clock, Download, Search, Users, XCircle } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import {
+  CheckCircle2,
+  Clock,
+  Download,
+  Eye,
+  FileDown,
+  FileCheck2,
+  Search,
+  Upload,
+  Users,
+  XCircle,
+} from "lucide-react";
+import { toast } from "sonner";
 import { formatRut } from "@/lib/rut";
 import type { ComplianceCourse, ComplianceRow, ComplianceStatus } from "@/server/queries/reports";
 import { Badge } from "@/components/ui/badge";
@@ -65,8 +78,53 @@ export function ComplianceReport({
   const [filter, setFilter] = useState<Filter>("ALL");
   const [area, setArea] = useState(ALL_AREAS);
   const [search, setSearch] = useState("");
+  const [uploadingUserId, setUploadingUserId] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const uploadUserId = useRef<string | null>(null);
+  const router = useRouter();
 
   const course = courses.find((c) => c.id === courseId);
+
+  function pickSignedFile(userId: string) {
+    uploadUserId.current = userId;
+    fileInput.current?.click();
+  }
+
+  // Sube la constancia firmada y escaneada (PDF/JPG); el servidor la optimiza.
+  async function onSignedFileChosen(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    const userId = uploadUserId.current;
+    if (!file || !userId || !courseId) return;
+    if (!/\.(pdf|jpe?g)$/i.test(file.name)) {
+      toast.error("Sólo se aceptan archivos PDF o JPG.");
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("El archivo supera el máximo de 20 MB.");
+      return;
+    }
+    setUploadingUserId(userId);
+    const toastId = toast.loading("Subiendo y optimizando la constancia firmada...");
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("userId", userId);
+      body.append("courseId", courseId);
+      const response = await fetch("/api/constancias-firmadas", { method: "POST", body });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        toast.error(data.error ?? "No se pudo subir la constancia.", { id: toastId });
+        return;
+      }
+      toast.success(data.message ?? "Constancia firmada guardada.", { id: toastId });
+      router.refresh();
+    } catch {
+      toast.error("Error de conexión al subir la constancia.", { id: toastId });
+    } finally {
+      setUploadingUserId(null);
+    }
+  }
 
   const areas = useMemo(
     () => [...new Set(rows.map((r) => r.areaName).filter((a): a is string => Boolean(a)))].sort(),
@@ -135,6 +193,7 @@ export function ComplianceReport({
       "Estado",
       "Fecha completado",
       "Nota",
+      "Constancia firmada",
     ];
     const lines = visible.map((x) =>
       [
@@ -148,6 +207,7 @@ export function ComplianceReport({
         STATUS_LABELS[x.status],
         formatDate(x.completedAt),
         x.finalScore ?? "",
+        x.row.signed[courseId] ? "Sí" : "No",
       ]
         .map(csvCell)
         .join(";"),
@@ -176,6 +236,13 @@ export function ComplianceReport({
 
   return (
     <div className="space-y-4">
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".pdf,.jpg,.jpeg,application/pdf,image/jpeg"
+        className="hidden"
+        onChange={onSignedFileChosen}
+      />
       {/* Selección de curso y filtros */}
       <Card>
         <CardContent className="flex flex-col gap-3 p-4 lg:flex-row lg:items-center">
@@ -268,13 +335,14 @@ export function ComplianceReport({
                   <TableHead className="w-28">Fecha ingreso</TableHead>
                   <TableHead className="w-36">Estado</TableHead>
                   <TableHead className="w-32">Completado</TableHead>
-                  <TableHead className="w-16 text-right pr-4">Nota</TableHead>
+                  <TableHead className="w-16 text-right">Nota</TableHead>
+                  <TableHead className="w-44 pr-4">Constancia</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {visible.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={7} className="h-28 text-center text-sm text-muted-foreground">
+                    <TableCell colSpan={8} className="h-28 text-center text-sm text-muted-foreground">
                       No hay funcionarios en esta vista.
                     </TableCell>
                   </TableRow>
@@ -296,8 +364,17 @@ export function ComplianceReport({
                       <TableCell className="text-xs tabular-nums" suppressHydrationWarning>
                         {formatDate(x.completedAt) || "—"}
                       </TableCell>
-                      <TableCell className="text-right pr-4 text-xs tabular-nums">
+                      <TableCell className="text-right text-xs tabular-nums">
                         {x.finalScore !== null ? `${x.finalScore}%` : "—"}
+                      </TableCell>
+                      <TableCell className="pr-4">
+                        <SignedCertificateCell
+                          signed={x.row.signed[courseId] ?? null}
+                          downloadUrl={`/api/constancia/descargar?userId=${x.row.id}&courseId=${courseId}`}
+                          uploading={uploadingUserId === x.row.id}
+                          disabled={uploadingUserId !== null}
+                          onUpload={() => pickSignedFile(x.row.id)}
+                        />
                       </TableCell>
                     </TableRow>
                   ))
@@ -359,5 +436,63 @@ function SummaryCard({
         </CardContent>
       </Card>
     </button>
+  );
+}
+
+/** Constancia del funcionario en el curso elegido: en blanco para firmar, subir la firmada o verla. */
+function SignedCertificateCell({
+  signed,
+  downloadUrl,
+  uploading,
+  disabled,
+  onUpload,
+}: {
+  signed: { id: string; isPdf: boolean } | null;
+  downloadUrl: string;
+  uploading: boolean;
+  disabled: boolean;
+  onUpload: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-1">
+      <Button asChild variant="ghost" size="sm" className="h-7 w-7 p-0" title="Descargar constancia para firmar">
+        <a href={downloadUrl}>
+          <FileDown className="h-4 w-4" />
+        </a>
+      </Button>
+      {signed ? (
+        <>
+          <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-1.5 text-[11px] text-emerald-700" title="Ver constancia firmada">
+            <a href={`/api/constancias-firmadas/${signed.id}`} target="_blank" rel="noreferrer">
+              <FileCheck2 className="h-3.5 w-3.5" />
+              Firmada
+              <Eye className="h-3 w-3" />
+            </a>
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 p-0"
+            title="Reemplazar constancia firmada"
+            disabled={disabled}
+            onClick={onUpload}
+          >
+            <Upload className="h-3.5 w-3.5" />
+          </Button>
+        </>
+      ) : (
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1 px-2 text-[11px]"
+          title="Subir constancia firmada (PDF o JPG)"
+          disabled={disabled}
+          onClick={onUpload}
+        >
+          <Upload className="h-3.5 w-3.5" />
+          {uploading ? "Subiendo..." : "Subir firmada"}
+        </Button>
+      )}
+    </div>
   );
 }

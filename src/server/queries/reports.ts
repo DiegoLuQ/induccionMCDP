@@ -23,6 +23,8 @@ export interface ComplianceRow {
     string,
     { status: Exclude<ComplianceStatus, "NOT_ASSIGNED">; completedAt: Date | null; finalScore: number | null }
   >;
+  /** Constancia firmada subida por curso (courseId -> datos). */
+  signed: Record<string, { id: string; isPdf: boolean }>;
 }
 
 /** Minúsculas, sin tildes y con espacios simples, para comparar nombres y correos. */
@@ -110,6 +112,9 @@ export async function getComplianceReport(
           where: { course: { institutionId, isPublished: true } },
           select: { courseId: true, status: true, completedAt: true, finalScore: true },
         },
+        signedCertificates: {
+          select: { id: true, courseId: true, mimeType: true },
+        },
       },
     }),
   ]);
@@ -128,6 +133,9 @@ export async function getComplianceReport(
           p.courseId,
           { status: p.status, completedAt: p.completedAt, finalScore: p.finalScore },
         ]),
+      ),
+      signed: Object.fromEntries(
+        u.signedCertificates.map((s) => [s.courseId, { id: s.id, isPdf: s.mimeType === "application/pdf" }]),
       ),
     })),
   };

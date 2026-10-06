@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth/session";
-import { isAdminRole } from "@/lib/auth/rbac";
+import { getStaffScope, findStaffInScope } from "@/lib/auth/staff-scope";
 import {
   SIGNED_CERT_MAX_BYTES,
   deleteSignedCertificateFile,
@@ -14,10 +14,11 @@ import {
  * Sube la constancia firmada (PDF o JPG) de un funcionario para un curso.
  * Ruta (y no Server Action) porque los escaneos superan el límite de 2 MB de
  * las acciones. Reemplaza la constancia anterior de ese funcionario y curso.
+ * RRHH/Super Admin: cualquier funcionario; auditor-jefatura: sólo los de sus áreas.
  */
 export async function POST(request: NextRequest) {
   const session = await getSession();
-  if (!session || !isAdminRole(session.role)) {
+  if (!session || !(await getStaffScope(session)).allowed) {
     return NextResponse.json({ error: "Sin permisos." }, { status: 403 });
   }
 
@@ -42,10 +43,7 @@ export async function POST(request: NextRequest) {
   }
 
   const [user, course] = await Promise.all([
-    prisma.user.findFirst({
-      where: { id: userId, institutionId: session.institutionId },
-      select: { id: true, name: true },
-    }),
+    findStaffInScope(session, userId),
     prisma.course.findFirst({
       where: { id: courseId, institutionId: session.institutionId },
       select: { id: true, title: true },
