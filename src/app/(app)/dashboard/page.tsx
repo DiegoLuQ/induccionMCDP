@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import {
-  AlertCircle,
   BookOpen,
   CheckCircle2,
   Clock,
@@ -13,13 +12,17 @@ import { redirect } from "next/navigation";
 import { Role } from "@prisma/client";
 import { requireSession } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/rbac";
-import { SIN_ASIGNAR } from "@/lib/constants";
 import { formatDateTime } from "@/lib/utils";
-import { formatRut } from "@/lib/rut";
-import { getAdminDashboard, getUserDashboard } from "@/server/queries/dashboard";
+import {
+  COMPLIANCE_PAGE_SIZE,
+  getAdminDashboard,
+  getComplianceTable,
+  getUserDashboard,
+} from "@/server/queries/dashboard";
 import { getMandatoryCompliance } from "@/server/queries/mandatory";
 import { getActiveCourse } from "@/lib/active-course";
 import { MandatoryComplianceCards } from "@/components/admin/mandatory-compliance-cards";
+import { DashboardComplianceTabs } from "@/components/admin/dashboard-compliance-tabs";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { ProgressBadge } from "@/components/shared/status-badge";
@@ -32,25 +35,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 
 export const metadata: Metadata = { title: "Inicio" };
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ tab?: string; area?: string; estado?: string; pagina?: string }>;
+}) {
+  const params = await searchParams;
   const session = await requireSession();
   // El auditor no tiene inicio propio: su única vista es el reporte.
   if (session.role === Role.AUDITOR) redirect("/reportes");
 
   return isAdminRole(session.role) ? (
-    <AdminDashboard institutionId={session.institutionId} name={session.name} />
+    <AdminDashboard institutionId={session.institutionId} name={session.name} params={params} />
   ) : (
     <FuncionarioDashboard
       userId={session.sub}
@@ -63,14 +62,23 @@ export default async function DashboardPage() {
 async function AdminDashboard({
   institutionId,
   name,
+  params,
 }: {
   institutionId: string;
   name: string;
+  params: { tab?: string; area?: string; estado?: string; pagina?: string };
 }) {
-  const [data, mandatoryAll, { activeCourseId }] = await Promise.all([
-    getAdminDashboard(institutionId),
+  const { activeCourseId } = await getActiveCourse(institutionId);
+  const tab = params.tab === "actividad" ? "actividad" : "pendientes";
+  const status = (["ALL", "NONE", "PENDING", "IN_PROGRESS", "COMPLETED"] as const).find(
+    (s) => s === params.estado,
+  ) ?? "ALL";
+  const page = Math.max(1, Number.parseInt(params.pagina ?? "1", 10) || 1);
+  const [data, mandatoryAll, compliance] = await Promise.all([
+    getAdminDashboard(institutionId, { courseId: activeCourseId }),
     getMandatoryCompliance(institutionId),
-    getActiveCourse(institutionId),
+    // Tabla paginada (10 por página) según la "Inducción activa".
+    getComplianceTable(institutionId, activeCourseId, { tab, areaId: params.area ?? "", status, page }),
   ]);
   const mandatory = [...mandatoryAll].sort(
     (a, b) => Number(b.id === activeCourseId) - Number(a.id === activeCourseId),
@@ -142,7 +150,7 @@ async function AdminDashboard({
                 <span>Inducciones y Cumplimiento</span>
                 {data.latestCourse && (
                   <Badge variant="outline" className="font-normal text-xs bg-muted/40">
-                    Vigente: {data.latestCourse.title}
+                    Inducción activa: {data.latestCourse.title}
                   </Badge>
                 )}
               </CardTitle>
@@ -159,164 +167,19 @@ async function AdminDashboard({
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          <Tabs defaultValue={data.totalPendingStaff > 0 ? "pendientes" : "actividad"}>
-            <div className="px-6 pt-4 border-b bg-muted/10">
-              <TabsList className="bg-muted/50">
-                <TabsTrigger value="pendientes" className="gap-1.5 text-xs">
-                  <AlertCircle className="h-3.5 w-3.5 text-amber-500" />
-                  <span>Sin Inducción Aprobada</span>
-                  <Badge
-                    variant={data.totalPendingStaff > 0 ? "destructive" : "secondary"}
-                    className="ml-1 px-1.5 py-0 text-[10px] h-4"
-                  >
-                    {data.totalPendingStaff}
-                  </Badge>
-                </TabsTrigger>
-                <TabsTrigger value="actividad" className="gap-1.5 text-xs">
-                  <Clock className="h-3.5 w-3.5" />
-                  <span>Últimos Movimientos</span>
-                  <Badge variant="secondary" className="ml-1 px-1.5 py-0 text-[10px] h-4">
-                    {data.recent.length}
-                  </Badge>
-                </TabsTrigger>
-              </TabsList>
-            </div>
-
-            {/* PESTAÑA 1: Funcionarios que NO han hecho ninguna inducción */}
-            <TabsContent value="pendientes" className="m-0">
-              {data.pendingStaff.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-10 text-center px-4">
-                  <CheckCircle2 className="h-10 w-10 text-emerald-500 mb-2" />
-                  <p className="text-sm font-semibold text-foreground">
-                    ¡Excelente! Todo el personal activo está al día
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1 max-w-sm">
-                    No hay funcionarios activos pendientes. Todos cuentan con al menos una inducción institucional aprobada.
-                  </p>
-                </div>
-              ) : (
-                <>
-                  <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-2.5 flex items-center justify-between text-xs text-amber-900 dark:text-amber-200">
-                    <span>
-                      Mostrando <strong>{data.pendingStaff.length}</strong> de <strong>{data.totalPendingStaff}</strong> funcionario(s) que aún no completan ninguna inducción.
-                      {data.latestCourse && (
-                        <span className="ml-1 text-muted-foreground">
-                          (Inducción sugerida para asignar: <strong>{data.latestCourse.title}</strong>)
-                        </span>
-                      )}
-                    </span>
-                    <Button asChild size="sm" variant="ghost" className="h-7 text-xs text-amber-900 dark:text-amber-200 hover:bg-amber-500/20">
-                      <Link href="/admin/funcionarios">
-                        Asignar ahora →
-                      </Link>
-                    </Button>
-                  </div>
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Funcionario</TableHead>
-                        <TableHead>Cargo y Área</TableHead>
-                        <TableHead>Inducción Vigente</TableHead>
-                        <TableHead>Estado Actual</TableHead>
-                        <TableHead className="text-right pr-6">Acción</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {data.pendingStaff.map((user) => {
-                        const hasProgress = user.courseProgress && user.courseProgress.length > 0;
-                        const progressStatus = hasProgress ? user.courseProgress[0]!.status : null;
-
-                        return (
-                          <TableRow key={user.id}>
-                            <TableCell>
-                              <span className="block font-medium">{user.name}</span>
-                              <span className="block text-xs text-muted-foreground font-mono">
-                                {formatRut(user.rut)} {user.email ? `· ${user.email}` : ""}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              <span className="block font-medium">
-                                {user.position?.name ?? SIN_ASIGNAR}
-                              </span>
-                              <span className="block text-muted-foreground">
-                                {user.area?.name ?? "Sin área"}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-xs">
-                              {data.latestCourse ? (
-                                <span className="font-medium">{data.latestCourse.title}</span>
-                              ) : (
-                                <span className="text-muted-foreground italic">
-                                  Sin inducciones publicadas
-                                </span>
-                              )}
-                            </TableCell>
-                            <TableCell>
-                              {progressStatus === "IN_PROGRESS" ? (
-                                <Badge variant="warning">En progreso</Badge>
-                              ) : progressStatus === "PENDING" ? (
-                                <Badge variant="secondary">Asignado (Pendiente)</Badge>
-                              ) : (
-                                <Badge variant="destructive">Sin inducción</Badge>
-                              )}
-                            </TableCell>
-                            <TableCell className="text-right pr-6">
-                              <Button asChild size="sm" variant="outline" className="h-7 text-xs">
-                                <Link href="/admin/invitaciones">
-                                  Gestionar
-                                </Link>
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        );
-                      })}
-                    </TableBody>
-                  </Table>
-                </>
-              )}
-            </TabsContent>
-
-            {/* PESTAÑA 2: Últimos movimientos registrados */}
-            <TabsContent value="actividad" className="m-0">
-              {data.recent.length === 0 ? (
-                <p className="px-6 py-8 text-center text-sm text-muted-foreground">
-                  Aún no hay actividad reciente registrada en este colegio.
-                </p>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Funcionario</TableHead>
-                      <TableHead>Inducción</TableHead>
-                      <TableHead>Estado</TableHead>
-                      <TableHead className="text-right pr-6">Actualizado</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {data.recent.map((entry) => (
-                      <TableRow key={entry.id}>
-                        <TableCell>
-                          <span className="block font-medium">{entry.user.name}</span>
-                          <span className="block text-xs text-muted-foreground">
-                            {formatRut(entry.user.rut)} · {entry.user.position?.name ?? SIN_ASIGNAR}
-                          </span>
-                        </TableCell>
-                        <TableCell className="max-w-[240px] truncate font-medium">
-                          {entry.course.title}
-                        </TableCell>
-                        <TableCell>
-                          <ProgressBadge status={entry.status} />
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground text-right pr-6">
-                          {formatDateTime(entry.updatedAt)}
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              )}
-            </TabsContent>
-          </Tabs>
+          <DashboardComplianceTabs
+            courseTitle={data.latestCourse?.title ?? null}
+            tab={tab}
+            areaId={params.area ?? ""}
+            status={status}
+            page={page}
+            pageSize={COMPLIANCE_PAGE_SIZE}
+            areas={compliance.areas}
+            pendingTotal={compliance.pendingTotal}
+            recentTotal={compliance.recentTotal}
+            pending={compliance.pending}
+            recent={compliance.recent}
+          />
         </CardContent>
       </Card>
     </>

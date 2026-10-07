@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Check, ChevronsUpDown, GraduationCap } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { formatPeriod } from "@/lib/periods";
 import { setActiveCourseAction } from "@/server/actions/active-course-actions";
 import { Button } from "@/components/ui/button";
 import {
@@ -59,7 +60,7 @@ export function CourseSwitcher({
           <span className="min-w-0 truncate text-left text-xs">
             <span className="block truncate font-medium">{active.title}</span>
             <span className="block truncate text-[10px] text-muted-foreground">
-              {active.isMandatory ? "Obligatorio" : "Opcional"} · {active.period}
+              {active.isMandatory ? "Obligatorio" : "Opcional"} · {formatPeriod(active.period)}
             </span>
           </span>
           <ChevronsUpDown className="h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
@@ -74,7 +75,7 @@ export function CourseSwitcher({
             <span className="min-w-0 flex-1">
               <span className="block truncate text-sm">{course.title}</span>
               <span className="block text-[11px] text-muted-foreground">
-                {course.isMandatory ? "Obligatorio" : "Opcional"} · Período {course.period}
+                {course.isMandatory ? "Obligatorio" : "Opcional"} · Período {formatPeriod(course.period)}
               </span>
             </span>
           </DropdownMenuItem>

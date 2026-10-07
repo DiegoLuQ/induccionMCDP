@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { AlertTriangle, CalendarClock } from "lucide-react";
 import type { MandatoryCourseCompliance } from "@/server/queries/mandatory";
+import { formatPeriod } from "@/lib/periods";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -53,7 +54,7 @@ export function MandatoryComplianceCards({
                     <CardTitle className="text-base">{course.title}</CardTitle>
                     <CardDescription className="flex flex-wrap items-center gap-1.5 pt-1">
                       {course.id === activeCourseId && <Badge>Inducción activa</Badge>}
-                      <Badge variant="outline">Período {course.period}</Badge>
+                      <Badge variant="outline">Período {formatPeriod(course.period)}</Badge>
                       {course.typeName && <Badge variant="secondary">{course.typeName}</Badge>}
                       {course.dueDate && (
                         <span className={`flex items-center gap-1 text-xs ${overdue ? "text-destructive" : ""}`}>

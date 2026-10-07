@@ -5,7 +5,10 @@ import { useRouter } from "next/navigation";
 import { AlertTriangle, CalendarClock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  correctCurrentPeriodAction,
   deleteCoursePeriodAction,
+  revertCoursePeriodAction,
+  switchCoursePeriodAction,
   startNewCoursePeriodAction,
   updateCourseMandatoryAction,
 } from "@/server/actions/course-period-actions";
@@ -21,6 +24,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import { formatPeriod, nextPeriodCode, periodOrder, periodYear } from "@/lib/periods";
 
 function toInputDate(value: Date | string | null): string {
   return value ? new Date(value).toISOString().slice(0, 10) : "";
@@ -49,7 +53,7 @@ export function CoursePeriodBadge({
       ) : (
         <Badge variant="secondary">Opcional</Badge>
       )}
-      <Badge variant="outline">Período {period}</Badge>
+      <Badge variant="outline">Período {formatPeriod(period)}</Badge>
       {isMandatory && dueDate && (
         <span className="text-[11px] text-muted-foreground">límite {formatDue(dueDate)}</span>
       )}
@@ -75,16 +79,72 @@ export function CoursePeriodControls({
   /** Funcionarios con avance en el período vigente (lo que se archivará). */
   activeCount: number;
   /** Períodos cerrados con datos archivados (historial y constancias). */
-  archivedPeriods: Array<{ period: number; history: number; certificates: number }>;
+  archivedPeriods: Array<{ period: number; history: number; submissions: number; certificates: number }>;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [mandatory, setMandatory] = useState(isMandatory);
   const [due, setDue] = useState(toInputDate(dueDate));
-  const [newPeriod, setNewPeriod] = useState(String(period + 1));
+  // Año del nuevo período (por defecto el año en curso; puede repetirse el del vigente).
+  const defaultYear = String(Math.max(periodYear(period), new Date().getFullYear()));
+  const [newPeriod, setNewPeriod] = useState(defaultYear);
   const [confirmText, setConfirmText] = useState("");
   const [deleting, setDeleting] = useState<number | null>(null);
+  const [reverting, setReverting] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [correctYear, setCorrectYear] = useState(String(periodYear(period)));
+
+  function correctPeriod() {
+    startTransition(async () => {
+      const result = await correctCurrentPeriodAction({ courseId, year: Number(correctYear) });
+      if (result.success) {
+        toast.success(result.message ?? "Período corregido.");
+        setCorrecting(false);
+        setOpen(false);
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    });
+  }
+  const [revertText, setRevertText] = useState("");
+  // Período al que se volvería: el archivado más reciente anterior al vigente.
+  const previousArchived = archivedPeriods
+    .map((a) => a.period)
+    .filter((p) => periodOrder(p) < periodOrder(period))
+    .sort((a, b) => periodOrder(b) - periodOrder(a))[0];
+
+  const [activating, setActivating] = useState<number | null>(null);
+
+  function activatePeriod(target: number) {
+    startTransition(async () => {
+      const result = await switchCoursePeriodAction({ courseId, period: target });
+      if (result.success) {
+        toast.success(result.message ?? "Período activado.", { duration: 8000 });
+        setActivating(null);
+        setOpen(false);
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    });
+  }
+
+  function revertPeriod() {
+    startTransition(async () => {
+      const result = await revertCoursePeriodAction({ courseId });
+      if (result.success) {
+        toast.success(result.message ?? "Se volvió al período anterior.", { duration: 8000 });
+        setReverting(false);
+        setRevertText("");
+        setOpen(false);
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    });
+  }
   const [deleteText, setDeleteText] = useState("");
 
   function deletePeriod(periodToDelete: number) {
@@ -114,9 +174,16 @@ export function CoursePeriodControls({
     });
   }
 
+  const newCode = nextPeriodCode(
+    period,
+    Number(newPeriod),
+    archivedPeriods.map((a) => a.period),
+  );
+  const newLabel = newCode ? formatPeriod(newCode) : "—";
+
   function startPeriod() {
     startTransition(async () => {
-      const result = await startNewCoursePeriodAction({ courseId, newPeriod: Number(newPeriod) });
+      const result = await startNewCoursePeriodAction({ courseId, year: Number(newPeriod) });
       if (result.success) {
         toast.success(result.message ?? "Nuevo período iniciado.", { duration: 8000 });
         setOpen(false);
@@ -137,7 +204,7 @@ export function CoursePeriodControls({
         onClick={() => {
           setMandatory(isMandatory);
           setDue(toInputDate(dueDate));
-          setNewPeriod(String(period + 1));
+          setNewPeriod(defaultYear);
           setConfirmText("");
           setOpen(true);
         }}
@@ -151,7 +218,7 @@ export function CoursePeriodControls({
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>{courseTitle}</DialogTitle>
-            <DialogDescription>Período vigente: {period}</DialogDescription>
+            <DialogDescription>Período vigente: {formatPeriod(period)}</DialogDescription>
           </DialogHeader>
 
           {/* Obligatoriedad */}
@@ -193,7 +260,7 @@ export function CoursePeriodControls({
             <div className="flex items-start gap-2 rounded-md border border-amber-200 bg-amber-50 p-2.5 text-xs text-amber-800">
               <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
               <span>
-                Se guarda en el historial el resultado {period} de {activeCount} funcionario(s) (estado,
+                Se guarda en el historial el resultado del período {formatPeriod(period)} de {activeCount} funcionario(s) (estado,
                 nota, fechas, respuestas y constancias firmadas) y el curso se reinicia: todos deberán
                 realizarlo de nuevo en el período nuevo. Las invitaciones vigentes se anulan.
               </span>
@@ -201,7 +268,7 @@ export function CoursePeriodControls({
             <div className="flex flex-wrap items-end gap-2">
               <div className="space-y-1">
                 <Label htmlFor="period" className="text-xs">
-                  Nuevo período
+                  Año del nuevo período
                 </Label>
                 <Input
                   id="period"
@@ -210,6 +277,9 @@ export function CoursePeriodControls({
                   onChange={(e) => setNewPeriod(e.target.value)}
                   className="w-28"
                 />
+                <p className="text-[11px] text-muted-foreground">
+                  {newCode ? `Se creará el período ${newLabel}` : "Debe ser el año vigente o posterior"}
+                </p>
               </div>
               <div className="flex-1 space-y-1">
                 <Label htmlFor="confirm" className="text-xs">
@@ -224,9 +294,9 @@ export function CoursePeriodControls({
                 variant="destructive"
                 onClick={startPeriod}
                 isLoading={isPending}
-                disabled={confirmText.trim() !== newPeriod.trim() || !newPeriod}
+                disabled={!newCode || confirmText.trim() !== newPeriod.trim()}
               >
-                Iniciar período {newPeriod}
+                Iniciar período {newLabel}
               </Button>
             </div>
           </div>
@@ -234,19 +304,119 @@ export function CoursePeriodControls({
           {/* Períodos archivados */}
           <Separator />
           <div className="space-y-2">
-            <p className="text-sm font-semibold">Períodos archivados</p>
+            <p className="text-sm font-semibold">Períodos</p>
+            <div className="rounded-md border border-primary/30 bg-primary/5 p-2 text-xs">
+              <div className="flex items-center justify-between gap-2">
+                <span>
+                  <strong>Período {formatPeriod(period)}</strong> · vigente · {activeCount} funcionario(s) con avance
+                </span>
+                {previousArchived !== undefined && !reverting && (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-[11px]"
+                    disabled={isPending}
+                    onClick={() => {
+                      setReverting(true);
+                      setRevertText("");
+                    }}
+                  >
+                    Volver a {formatPeriod(previousArchived)}
+                  </Button>
+                )}
+              </div>
+              {/* Sin actividad en el período vigente: se puede corregir su año. */}
+              {activeCount === 0 && !reverting && (
+                <div className="mt-2">
+                  {correcting ? (
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-muted-foreground">Corregir año del período vigente:</span>
+                      <Input
+                        type="number"
+                        value={correctYear}
+                        onChange={(e) => setCorrectYear(e.target.value)}
+                        className="h-8 w-24"
+                      />
+                      <Button size="sm" className="h-8" isLoading={isPending} onClick={correctPeriod}>
+                        Guardar
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-8" onClick={() => setCorrecting(false)}>
+                        Cancelar
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      className="text-[11px] text-primary underline"
+                      onClick={() => {
+                        setCorrectYear(String(periodYear(period)));
+                        setCorrecting(true);
+                      }}
+                    >
+                      ¿Se abrió por error? Corregir el año del período vigente
+                    </button>
+                  )}
+                </div>
+              )}
+              {reverting && previousArchived !== undefined && (
+                <div className="mt-2 space-y-2">
+                  <p className="text-amber-800">
+                    El período {formatPeriod(period)} se <strong>archiva</strong> ({activeCount} funcionario(s) con
+                    avance, sus videos, respuestas y constancias; no se pierde nada) y se activa{" "}
+                    {formatPeriod(previousArchived)} con sus datos. Podrás volver a activar {formatPeriod(period)} desde
+                    la lista de períodos archivados. Las invitaciones vigentes se anulan.
+                  </p>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      value={revertText}
+                      onChange={(e) => setRevertText(e.target.value.toUpperCase())}
+                      placeholder="Escribe VOLVER"
+                      className="h-8 w-36"
+                    />
+                    <Button
+                      size="sm"
+                      className="h-8"
+                      isLoading={isPending}
+                      disabled={revertText.trim() !== "VOLVER"}
+                      onClick={revertPeriod}
+                    >
+                      Volver al período {formatPeriod(previousArchived)}
+                    </Button>
+                    <Button size="sm" variant="ghost" className="h-8" onClick={() => setReverting(false)}>
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </div>
             {archivedPeriods.length === 0 ? (
-              <p className="text-xs text-muted-foreground">Este curso aún no tiene períodos cerrados.</p>
+              <p className="text-xs text-muted-foreground">
+                Aún no hay períodos archivados. Aparecerán aquí al usar &quot;Iniciar nuevo período&quot;
+                (sólo si el período cerrado tenía resultados, respuestas o constancias).
+              </p>
             ) : (
               <ul className="space-y-2">
                 {archivedPeriods.map((item) => (
                   <li key={item.period} className="rounded-md border p-2 text-xs">
                     <div className="flex items-center justify-between gap-2">
                       <span>
-                        <strong>Período {item.period}</strong> · {item.history} resultado(s) ·{" "}
-                        {item.certificates} constancia(s) firmada(s)
+                        <span className="font-semibold text-emerald-700">✔ </span>
+                        <strong>Período {formatPeriod(item.period)}</strong> archivado · {item.history} resultado(s) ·{" "}
+                        {item.submissions} respuesta(s) · {item.certificates} constancia(s) firmada(s)
                       </span>
-                      {deleting !== item.period && (
+                      {deleting !== item.period && activating !== item.period && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-7 shrink-0 px-2 text-[11px]"
+                          title={`Activar el período ${formatPeriod(item.period)} (el vigente se archiva, sin perder datos)`}
+                          disabled={isPending}
+                          onClick={() => setActivating(item.period)}
+                        >
+                          Activar
+                        </Button>
+                      )}
+                      {deleting !== item.period && activating !== item.period && (
                         <Button
                           variant="ghost"
                           size="sm"
@@ -262,11 +432,27 @@ export function CoursePeriodControls({
                         </Button>
                       )}
                     </div>
+                    {activating === item.period && (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-amber-800">
+                          El período vigente ({formatPeriod(period)}) se archiva con todos sus datos y se activa{" "}
+                          {formatPeriod(item.period)}. No se pierde nada: puedes volver cuando quieras.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Button size="sm" className="h-8" isLoading={isPending} onClick={() => activatePeriod(item.period)}>
+                            Activar {formatPeriod(item.period)}
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8" onClick={() => setActivating(null)}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                     {deleting === item.period && (
                       <div className="mt-2 space-y-2">
                         <p className="text-destructive">
                           Se borrarán para siempre su historial, las respuestas archivadas y las constancias
-                          firmadas (con sus archivos) del período {item.period}.
+                          firmadas (con sus archivos) del período {formatPeriod(item.period)}.
                         </p>
                         <div className="flex items-center gap-2">
                           <Input

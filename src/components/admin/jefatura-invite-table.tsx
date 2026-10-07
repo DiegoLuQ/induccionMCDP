@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { toast } from "sonner";
+import { formatPeriod } from "@/lib/periods";
 import {
   Users,
   Mail,
@@ -730,7 +731,7 @@ export function JefaturaInviteTable({
                   courses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.title}
-                      {c.isMandatory ? ` · Obligatorio${c.currentPeriod ? ` ${c.currentPeriod}` : ""}` : ""}
+                      {c.isMandatory ? ` · Obligatorio${c.currentPeriod ? ` ${formatPeriod(c.currentPeriod)}` : ""}` : ""}
                     </option>
                   ))
                 )}

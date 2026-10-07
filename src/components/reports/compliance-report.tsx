@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatRut } from "@/lib/rut";
+import { formatPeriod } from "@/lib/periods";
 import type { ComplianceCourse, ComplianceRow, ComplianceStatus } from "@/server/queries/reports";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -336,10 +337,10 @@ export function ComplianceReport({
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="current">Período {course.period} (vigente)</SelectItem>
+                <SelectItem value="current">Período {formatPeriod(course.period)} (vigente)</SelectItem>
                 {course.pastPeriods.map((p) => (
                   <SelectItem key={p} value={String(p)}>
-                    Período {p} (historial)
+                    Período {formatPeriod(p)} (historial)
                   </SelectItem>
                 ))}
               </SelectContent>

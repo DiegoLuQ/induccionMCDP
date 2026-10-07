@@ -1,4 +1,6 @@
+import Link from "next/link";
 import { redirect } from "next/navigation";
+import { isProvisionalEmail } from "@/lib/provisional-email";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { Role } from "@prisma/client";
@@ -68,6 +70,16 @@ export default async function AppLayout({
           courses={activeCourse?.courses ?? []}
           activeCourseId={activeCourse?.activeCourseId ?? null}
         />
+        {userRecord && isProvisionalEmail(userRecord.corporateEmail || userRecord.email) && (
+          <div className="border-b border-amber-300 bg-amber-50 px-4 py-2 text-sm text-amber-900 lg:px-8">
+            Tu correo institucional <strong>{userRecord.corporateEmail || userRecord.email}</strong> es
+            provisorio (generado con tu RUT). Por favor cámbialo por tu correo institucional real en{" "}
+            <Link href="/perfil" className="font-semibold underline">
+              Mi cuenta
+            </Link>
+            .
+          </div>
+        )}
         <main className="flex-1 px-4 py-6 lg:px-8">{children}</main>
       </div>
 

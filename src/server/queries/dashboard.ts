@@ -6,8 +6,16 @@ import { LIKERT_SCALE } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { STAFF_ROLES } from "@/lib/auth/rbac";
 
-/** KPIs y monitoreo en tiempo real para RRHH. */
-export const getAdminDashboard = cache(async (institutionId: string) => {
+/**
+ * KPIs y monitoreo en tiempo real para RRHH.
+ * - `courseId`: inducción de referencia para "pendientes" (la "Inducción activa");
+ *   si no se indica, se usa la última publicada.
+ * - `recentLimit`: cuántos movimientos recientes traer.
+ */
+export const getAdminDashboard = cache(async (
+  institutionId: string,
+  options: { courseId?: string | null; recentLimit?: number } = {},
+) => {
   const now = new Date();
 
   const [
@@ -49,20 +57,25 @@ export const getAdminDashboard = cache(async (institutionId: string) => {
     prisma.courseProgress.findMany({
       where: { course: { institutionId } },
       orderBy: { updatedAt: "desc" },
-      take: 10,
+      take: options.recentLimit ?? 10,
       include: {
         user: {
           select: {
             name: true,
             rut: true,
             position: { select: { name: true } },
+            area: { select: { name: true } },
           },
         },
         course: { select: { title: true } },
       },
     }),
     prisma.course.findFirst({
-      where: { institutionId, isPublished: true },
+      where: {
+        institutionId,
+        isPublished: true,
+        ...(options.courseId ? { id: options.courseId } : {}),
+      },
       orderBy: [{ createdAt: "desc" }, { updatedAt: "desc" }],
       select: { id: true, title: true },
     }),
@@ -79,6 +92,7 @@ export const getAdminDashboard = cache(async (institutionId: string) => {
           courseProgress: {
             some: {
               status: ProgressStatus.COMPLETED,
+              ...(latestCourse ? { courseId: latestCourse.id } : {}),
             },
           },
         },
@@ -93,6 +107,7 @@ export const getAdminDashboard = cache(async (institutionId: string) => {
           courseProgress: {
             some: {
               status: ProgressStatus.COMPLETED,
+              ...(latestCourse ? { courseId: latestCourse.id } : {}),
             },
           },
         },
@@ -269,3 +284,140 @@ export const getPendingReviews = cache(async (institutionId: string) =>
     },
   }),
 );
+
+export const COMPLIANCE_PAGE_SIZE = 10;
+
+export type ComplianceTab = "pendientes" | "actividad";
+/** NONE = sin asignar (sólo en pendientes). */
+export type ComplianceStatusFilter = "ALL" | "NONE" | ProgressStatus;
+
+export interface ComplianceQuery {
+  tab: ComplianceTab;
+  /** id de área, "none" = sin área, "" = todas. */
+  areaId: string;
+  status: ComplianceStatusFilter;
+  page: number;
+}
+
+/**
+ * Tabla "Inducciones y Cumplimiento" del Inicio, paginada en la base de datos
+ * (10 por página) con filtros de área y estado aplicados en la consulta.
+ */
+export async function getComplianceTable(
+  institutionId: string,
+  courseId: string | null,
+  query: ComplianceQuery,
+) {
+  const skip = (Math.max(1, query.page) - 1) * COMPLIANCE_PAGE_SIZE;
+  const areaWhere =
+    query.areaId === "none" ? { areaId: null } : query.areaId ? { areaId: query.areaId } : {};
+
+  // Pendientes: funcionarios activos que NO completaron la inducción de referencia.
+  const pendingWhere = {
+    institutionId,
+    isActive: true,
+    role: { in: STAFF_ROLES },
+    ...areaWhere,
+    NOT: {
+      courseProgress: {
+        some: { status: ProgressStatus.COMPLETED, ...(courseId ? { courseId } : {}) },
+      },
+    },
+    ...(query.status === "NONE"
+      ? { courseProgress: { none: courseId ? { courseId } : {} } }
+      : query.status === "PENDING" || query.status === "IN_PROGRESS"
+        ? { courseProgress: { some: { status: query.status, ...(courseId ? { courseId } : {}) } } }
+        : {}),
+  };
+
+  // Movimientos: avance más reciente del colegio.
+  const recentWhere = {
+    course: { institutionId },
+    ...(query.areaId === "none"
+      ? { user: { areaId: null } }
+      : query.areaId
+        ? { user: { areaId: query.areaId } }
+        : {}),
+    ...(query.status !== "ALL" && query.status !== "NONE" ? { status: query.status } : {}),
+  };
+
+  const [areas, pendingTotal, recentTotal] = await Promise.all([
+    prisma.area.findMany({
+      where: { institutionId },
+      orderBy: { name: "asc" },
+      select: { id: true, name: true },
+    }),
+    prisma.user.count({ where: pendingWhere }),
+    prisma.courseProgress.count({ where: recentWhere }),
+  ]);
+
+  const [pending, recent] = await Promise.all([
+    query.tab === "pendientes"
+      ? prisma.user.findMany({
+          where: pendingWhere,
+          orderBy: { name: "asc" },
+          skip,
+          take: COMPLIANCE_PAGE_SIZE,
+          select: {
+            id: true,
+            name: true,
+            rut: true,
+            email: true,
+            position: { select: { name: true } },
+            area: { select: { name: true } },
+            courseProgress: {
+              where: { courseId: courseId ?? "" },
+              select: { status: true },
+            },
+          },
+        })
+      : Promise.resolve([]),
+    query.tab === "actividad"
+      ? prisma.courseProgress.findMany({
+          where: recentWhere,
+          orderBy: { updatedAt: "desc" },
+          skip,
+          take: COMPLIANCE_PAGE_SIZE,
+          select: {
+            id: true,
+            status: true,
+            updatedAt: true,
+            course: { select: { title: true } },
+            user: {
+              select: {
+                name: true,
+                rut: true,
+                position: { select: { name: true } },
+                area: { select: { name: true } },
+              },
+            },
+          },
+        })
+      : Promise.resolve([]),
+  ]);
+
+  return {
+    areas,
+    pendingTotal,
+    recentTotal,
+    pending: pending.map((u) => ({
+      id: u.id,
+      name: u.name,
+      rut: u.rut,
+      email: u.email,
+      positionName: u.position?.name ?? null,
+      areaName: u.area?.name ?? null,
+      status: u.courseProgress[0]?.status ?? null,
+    })),
+    recent: recent.map((r) => ({
+      id: r.id,
+      name: r.user.name,
+      rut: r.user.rut,
+      positionName: r.user.position?.name ?? null,
+      areaName: r.user.area?.name ?? null,
+      courseTitle: r.course.title,
+      status: r.status,
+      updatedAt: r.updatedAt,
+    })),
+  };
+}

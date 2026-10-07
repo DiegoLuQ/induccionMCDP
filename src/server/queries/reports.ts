@@ -2,6 +2,7 @@ import "server-only";
 
 import { prisma } from "@/lib/prisma";
 import { STAFF_ROLES } from "@/lib/auth/rbac";
+import { periodOrder } from "@/lib/periods";
 
 export type ComplianceStatus = "COMPLETED" | "IN_PROGRESS" | "PENDING" | "FAILED" | "NOT_ASSIGNED";
 
@@ -150,7 +151,7 @@ export async function getComplianceReport(
       typeName: c.type?.name ?? null,
       isMandatory: c.isMandatory,
       period: c.currentPeriod ?? c.createdAt.getFullYear(),
-      pastPeriods: c.progressHistory.map((h) => h.period),
+      pastPeriods: c.progressHistory.map((h) => h.period).sort((a, b) => periodOrder(b) - periodOrder(a)),
     })),
     rows: users.map((u) => ({
       id: u.id,

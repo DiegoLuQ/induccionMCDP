@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
 import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { isProvisionalEmail, PROVISIONAL_EMAIL_MESSAGE } from "@/lib/provisional-email";
 import { verifySecret, hashSecret } from "@/lib/auth/password";
 import {
   buildInstitutionIds,
@@ -144,6 +145,7 @@ export async function setupInitialAccessAction(
         `El correo institucional debe pertenecer al dominio @${allowedDomain}`,
       );
     }
+    if (isProvisionalEmail(rawEmail)) return failure(PROVISIONAL_EMAIL_MESSAGE);
 
     // Verificar unicidad en la institución
     const existing = await prisma.user.findFirst({

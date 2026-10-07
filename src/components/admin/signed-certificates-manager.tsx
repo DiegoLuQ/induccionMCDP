@@ -6,6 +6,7 @@ import { Download, Eye, FileCheck2, Search, Trash2, Upload, UserRound } from "lu
 import { toast } from "sonner";
 import { formatDateTime } from "@/lib/utils";
 import { formatRut } from "@/lib/rut";
+import { formatPeriod } from "@/lib/periods";
 import {
   deleteOrphanSignedFilesAction,
   deleteSignedCertificateAction,
@@ -488,7 +489,7 @@ export function SignedCertificatesManager({
                           {courseById.get(cert.courseId)?.title ?? "—"}
                           {cert.archivedPeriod > 0 ? (
                             <Badge variant="secondary" className="ml-2 text-[10px]">
-                              Período {cert.archivedPeriod} (historial)
+                              Período {formatPeriod(cert.archivedPeriod)} (historial)
                             </Badge>
                           ) : (
                             <Badge variant="outline" className="ml-2 text-[10px]">

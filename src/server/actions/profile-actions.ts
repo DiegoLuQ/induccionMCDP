@@ -7,6 +7,7 @@ import { createSession, getSession } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/rbac";
 import { failure, fromZodError, success, type ActionResult } from "@/lib/validations/common";
 import { updateProfileSchema } from "@/lib/validations/profile";
+import { isProvisionalEmail, PROVISIONAL_EMAIL_MESSAGE } from "@/lib/provisional-email";
 
 /**
  * Actualiza los datos de contacto del usuario en sesión. El RUT sólo lo
@@ -26,6 +27,7 @@ export async function updateProfileAction(input: unknown): Promise<ActionResult>
     select: {
       id: true,
       rut: true,
+      corporateEmail: true,
       institutionId: true,
       institution: { select: { domain: true } },
     },
@@ -37,6 +39,10 @@ export async function updateProfileAction(input: unknown): Promise<ActionResult>
   const rut = canEditRut && parsed.data.rut ? parsed.data.rut : user.rut;
 
   const domain = user.institution.domain.toLowerCase();
+  // Sólo se rechaza un provisorio NUEVO (el que ya tenía no impide guardar otros datos).
+  if (corporateEmail && isProvisionalEmail(corporateEmail) && corporateEmail !== user.corporateEmail) {
+    return failure(PROVISIONAL_EMAIL_MESSAGE, { corporateEmail: [PROVISIONAL_EMAIL_MESSAGE] });
+  }
   if (corporateEmail && !corporateEmail.endsWith(`@${domain}`)) {
     return failure(`El correo institucional debe pertenecer al dominio @${domain}.`, {
       corporateEmail: [`Debe terminar en @${domain}`],

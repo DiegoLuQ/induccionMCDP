@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   Award,
   CheckCircle2,
-  ExternalLink,
   GraduationCap,
   Loader2,
   Sparkles,
@@ -22,7 +21,6 @@ import {
   DialogContent,
   DialogDescription,
   DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 
@@ -45,6 +43,17 @@ export function CourseCompletionModal({
   const [hasConfirmedSuccessfully, setHasConfirmedSuccessfully] = useState(false);
 
   const institutionName = course.institution?.name || "Colegio";
+  // Mientras no confirme su término, no puede salir del modal (salvo la vista previa
+  // del administrador o una inducción que ya estaba confirmada).
+  const canLeave = isPreview || hasConfirmedSuccessfully || course.status === "COMPLETED";
+
+  function handleOpenChange(open: boolean) {
+    if (!open && !canLeave) {
+      toast.info("Marca la casilla y confirma tu término para continuar.");
+      return;
+    }
+    onOpenChange(open);
+  }
 
   function handleConfirm() {
     if (!confirmed && !hasConfirmedSuccessfully) {
@@ -65,136 +74,121 @@ export function CourseCompletionModal({
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg p-0 overflow-hidden sm:rounded-xl">
-        {/* Encabezado festivo */}
-        <div className="relative bg-gradient-to-br from-emerald-600 to-teal-700 px-6 pt-8 pb-6 text-center text-white dark:from-emerald-700 dark:to-teal-800">
-          <div className="mx-auto mb-3 flex h-16 w-16 items-center justify-center rounded-full bg-white/20 shadow-inner backdrop-blur-sm ring-8 ring-white/10">
-            <Award className="h-9 w-9 text-white" />
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      {/* Compacto: alto máximo 90% de la pantalla; sólo el cuerpo se desplaza. */}
+      <DialogContent
+        className="flex max-h-[90vh] w-[calc(100%-2rem)] max-w-md flex-col gap-0 overflow-hidden p-0 sm:rounded-xl"
+        onEscapeKeyDown={(e) => !canLeave && e.preventDefault()}
+        onPointerDownOutside={(e) => !canLeave && e.preventDefault()}
+      >
+        {/* Encabezado */}
+        <div className="flex shrink-0 items-center gap-3 bg-gradient-to-br from-emerald-600 to-teal-700 px-5 py-4 text-white dark:from-emerald-700 dark:to-teal-800">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-white/20 ring-4 ring-white/10">
+            <Award className="h-6 w-6" />
           </div>
-
-          <Badge className="mb-2 bg-white/20 text-white hover:bg-white/30 border-none px-3 py-0.5 text-xs font-semibold backdrop-blur-sm">
-            <Sparkles className="h-3 w-3 mr-1 text-amber-300" />
-            Inducción Finalizada
-          </Badge>
-
-          <DialogTitle className="text-xl font-bold text-white tracking-tight sm:text-2xl">
-            ¡Felicitaciones! Has terminado
-          </DialogTitle>
-          <DialogDescription className="mt-1 text-sm text-emerald-100">
-            Has completado satisfactoriamente los contenidos y evaluaciones de{" "}
-            <span className="font-semibold text-white">{course.title}</span>.
-          </DialogDescription>
+          <div className="min-w-0 text-left">
+            <Badge className="mb-1 border-none bg-white/20 px-2 py-0 text-[10px] font-semibold text-white hover:bg-white/30">
+              <Sparkles className="mr-1 h-3 w-3 text-amber-300" />
+              Inducción finalizada
+            </Badge>
+            <DialogTitle className="text-lg font-bold leading-tight text-white">
+              ¡Felicitaciones! Has terminado
+            </DialogTitle>
+            <DialogDescription className="truncate text-xs text-emerald-100" title={course.title}>
+              {course.title}
+            </DialogDescription>
+          </div>
         </div>
 
-        {/* Cuerpo del modal */}
-        <div className="p-6 space-y-5">
-          {/* Resumen de cumplimiento */}
-          <div className="rounded-lg border bg-muted/30 p-3.5 space-y-2.5 text-xs sm:text-sm">
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="flex items-center gap-1.5 font-medium text-foreground">
-                <GraduationCap className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                Establecimiento:
-              </span>
-              <span className="font-medium text-foreground">{institutionName}</span>
+        {/* Cuerpo (se desplaza si no cabe) */}
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          {/* Resumen en una fila */}
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="rounded-lg border bg-muted/30 px-2 py-2">
+              <Video className="mx-auto mb-1 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <p className="text-sm font-bold tabular-nums">
+                {course.lessons.length}/{course.lessons.length}
+              </p>
+              <p className="text-[10px] text-muted-foreground">Videos</p>
             </div>
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="flex items-center gap-1.5 font-medium text-foreground">
-                <Video className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                Videos completados:
-              </span>
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                {course.lessons.length} de {course.lessons.length} videos
-              </span>
+            <div className="rounded-lg border bg-muted/30 px-2 py-2">
+              <CheckCircle2 className="mx-auto mb-1 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <p className="text-sm font-bold">Aprobadas</p>
+              <p className="text-[10px] text-muted-foreground">Evaluaciones</p>
             </div>
-            <div className="flex items-center justify-between text-muted-foreground">
-              <span className="flex items-center gap-1.5 font-medium text-foreground">
-                <CheckCircle2 className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-                Preguntas de repaso:
-              </span>
-              <span className="font-semibold text-emerald-600 dark:text-emerald-400">
-                Todas respondidas y aprobadas
-              </span>
+            <div className="rounded-lg border bg-muted/30 px-2 py-2">
+              <GraduationCap className="mx-auto mb-1 h-4 w-4 text-emerald-600 dark:text-emerald-400" />
+              <p className="truncate text-sm font-bold" title={institutionName}>
+                {institutionName.replace(/^Colegio\s+/i, "")}
+              </p>
+              <p className="text-[10px] text-muted-foreground">Colegio</p>
             </div>
           </div>
 
           {!hasConfirmedSuccessfully ? (
-            /* Sección de confirmación requerida */
-            <div className="rounded-lg border-2 border-emerald-500/30 bg-emerald-500/5 p-4 space-y-3">
-              <div className="space-y-1">
-                <p className="text-xs font-semibold uppercase tracking-wider text-emerald-700 dark:text-emerald-400">
-                  Confirmación de finalización
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Para registrar tu cumplimiento oficial ante Recursos Humanos,
-                  confirma a continuación que has revisado los contenidos y completado las preguntas.
-                </p>
-              </div>
-
+            <div className="space-y-3 rounded-lg border-2 border-emerald-500/30 bg-emerald-500/5 p-3">
+              <p className="text-xs text-muted-foreground">
+                Confirma tu término para que quede registrado ante Recursos Humanos.{" "}
+                <strong className="text-foreground">Marca la casilla y presiona &quot;Confirmar término&quot; para continuar.</strong>
+              </p>
               <label
                 htmlFor="confirm-course-completion"
-                className="flex items-start gap-3 rounded-md border border-emerald-500/20 bg-background p-3 cursor-pointer select-none transition-colors hover:bg-accent/40"
+                className="flex cursor-pointer select-none items-start gap-2.5 rounded-md border border-emerald-500/20 bg-background p-2.5 transition-colors hover:bg-accent/40"
               >
                 <input
                   type="checkbox"
                   id="confirm-course-completion"
                   checked={confirmed}
                   onChange={(e) => setConfirmed(e.target.checked)}
-                  className="h-4 w-4 mt-0.5 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
+                  className="mt-0.5 h-4 w-4 cursor-pointer rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                 />
-                <span className="text-xs sm:text-sm font-medium leading-snug text-foreground">
+                <span className="text-xs font-medium leading-snug sm:text-sm">
                   Acepto que he terminado la {course.title}.
                 </span>
               </label>
-
               <Button
                 type="button"
                 onClick={handleConfirm}
                 disabled={!confirmed || isPending}
-                className="w-full gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold shadow-sm"
+                className="w-full gap-2 bg-emerald-600 font-semibold text-white hover:bg-emerald-700"
               >
                 {isPending ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    Registrando confirmación...
+                    Registrando...
                   </>
                 ) : (
                   <>
                     <CheckCircle2 className="h-4 w-4" />
-                    Confirmar término de inducción
+                    Confirmar término
                   </>
                 )}
               </Button>
             </div>
           ) : (
-            /* Estado de confirmación completada */
-            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-4 text-center space-y-2">
-              <CheckCircle2 className="h-8 w-8 mx-auto text-emerald-600 dark:text-emerald-400" />
-              <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                ¡Tu finalización ha sido confirmada y registrada!
-              </p>
-              <p className="text-xs text-muted-foreground">
-                El estado de la inducción quedó registrado como completado ante la institución.
-              </p>
+            <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+              <CheckCircle2 className="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              <div>
+                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                  ¡Término confirmado y registrado!
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  Recuerda firmar tu Constancia de Participación y entregarla a Recursos Humanos.
+                </p>
+              </div>
             </div>
           )}
         </div>
 
-        {/* Acciones de navegación */}
-        <DialogFooter className="border-t bg-muted/20 px-6 py-3.5 sm:flex-row gap-2">
+        {/* Acciones */}
+        <DialogFooter className="shrink-0 gap-2 border-t bg-muted/20 px-5 py-3 sm:flex-row">
           {isPreview ? (
             <>
-              <Button
-                variant="outline"
-                onClick={() => onOpenChange(false)}
-                className="w-full sm:w-auto"
-              >
+              <Button variant="outline" onClick={() => onOpenChange(false)} className="w-full sm:w-auto">
                 Cerrar vista previa
               </Button>
               <Button asChild className="w-full sm:w-auto">
-                <Link href={`/admin/cursos/${course.id}`}>
-                  Volver al detalle del curso
-                </Link>
+                <Link href={`/admin/cursos/${course.id}`}>Volver al curso</Link>
               </Button>
             </>
           ) : (
@@ -202,15 +196,21 @@ export function CourseCompletionModal({
               <Button
                 variant="outline"
                 onClick={() => onOpenChange(false)}
+                disabled={!canLeave}
+                title={canLeave ? undefined : "Primero confirma tu término"}
                 className="w-full sm:w-auto"
               >
-                Permanecer en el reproductor
+                Seguir aquí
               </Button>
-              <Button asChild className="w-full sm:w-auto">
-                <Link href="/mis-inducciones">
-                  Ir a Mis Inducciones
-                </Link>
-              </Button>
+              {canLeave ? (
+                <Button asChild className="w-full sm:w-auto">
+                  <Link href="/mis-inducciones">Ir a Mis inducciones</Link>
+                </Button>
+              ) : (
+                <Button disabled title="Primero confirma tu término" className="w-full sm:w-auto">
+                  Ir a Mis inducciones
+                </Button>
+              )}
             </>
           )}
         </DialogFooter>

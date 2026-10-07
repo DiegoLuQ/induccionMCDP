@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { GraduationCap } from "lucide-react";
 import { LoginForm } from "./login-form";
+import { LoginHelpButton } from "@/components/auth/login-help-button";
 
 export const metadata: Metadata = { title: "Ingresar" };
 
@@ -14,8 +15,11 @@ export default function LoginPage() {
           <GraduationCap className="h-9 w-9 text-primary" aria-hidden />
           <h1 className="mt-3 text-xl font-semibold">Inducción y Capacitación</h1>
           <p className="text-sm text-muted-foreground">
-            Ingresa con tu RUT o correo institucional
+            Ingresa con tu RUT y la clave que creaste
           </p>
+          <div className="mt-1">
+            <LoginHelpButton />
+          </div>
         </div>
 
         {/* useSearchParams exige un límite de Suspense. */}

@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { formatDuration } from "@/lib/utils";
 import { getAdminCourses } from "@/server/queries/courses";
 import { STAFF_ROLES } from "@/lib/auth/rbac";
+import { periodOrder } from "@/lib/periods";
 import {
   CoursePeriodBadge,
   CoursePeriodControls,
@@ -45,7 +46,7 @@ export default async function AdminCoursesPage() {
     }),
   ]);
   // Períodos cerrados por curso (historial y constancias archivadas).
-  const [historyGroups, certificateGroups] = await Promise.all([
+  const [historyGroups, certificateGroups, submissionGroups, evaluations] = await Promise.all([
     prisma.courseProgressHistory.groupBy({
       by: ["courseId", "period"],
       where: { course: { institutionId: session.institutionId } },
@@ -56,17 +57,39 @@ export default async function AdminCoursesPage() {
       where: { institutionId: session.institutionId, archivedPeriod: { gt: 0 } },
       _count: { _all: true },
     }),
+    prisma.evaluationSubmission.groupBy({
+      by: ["evaluationId", "archivedPeriod"],
+      where: { archivedPeriod: { gt: 0 }, user: { institutionId: session.institutionId } },
+      _count: { _all: true },
+    }),
+    prisma.evaluation.findMany({
+      where: {
+        OR: [
+          { course: { institutionId: session.institutionId } },
+          { lesson: { course: { institutionId: session.institutionId } } },
+        ],
+      },
+      select: { id: true, courseId: true, lesson: { select: { courseId: true } } },
+    }),
   ]);
-  const archivedByCourse = new Map<string, Map<number, { period: number; history: number; certificates: number }>>();
+  const courseOfEvaluation = new Map(evaluations.map((e) => [e.id, e.courseId ?? e.lesson?.courseId ?? ""]));
+  const archivedByCourse = new Map<
+    string,
+    Map<number, { period: number; history: number; submissions: number; certificates: number }>
+  >();
   const entry = (courseId: string, period: number) => {
     const byPeriod = archivedByCourse.get(courseId) ?? new Map();
     archivedByCourse.set(courseId, byPeriod);
-    const item = byPeriod.get(period) ?? { period, history: 0, certificates: 0 };
+    const item = byPeriod.get(period) ?? { period, history: 0, submissions: 0, certificates: 0 };
     byPeriod.set(period, item);
     return item;
   };
   for (const g of historyGroups) entry(g.courseId, g.period).history = g._count._all;
   for (const g of certificateGroups) entry(g.courseId, g.archivedPeriod).certificates = g._count._all;
+  for (const g of submissionGroups) {
+    const courseId = courseOfEvaluation.get(g.evaluationId);
+    if (courseId) entry(courseId, g.archivedPeriod).submissions += g._count._all;
+  }
 
   // Obligatorios primero; dentro de cada grupo, los más recientes.
   const courses = [...allCourses].sort((a, b) => Number(b.isMandatory) - Number(a.isMandatory));
@@ -215,7 +238,7 @@ export default async function AdminCoursesPage() {
                             dueDate={course.dueDate}
                             activeCount={course.progress.length}
                             archivedPeriods={[...(archivedByCourse.get(course.id)?.values() ?? [])].sort(
-                              (a, b) => b.period - a.period,
+                              (a, b) => periodOrder(b.period) - periodOrder(a.period),
                             )}
                           />
                           <PublishToggle

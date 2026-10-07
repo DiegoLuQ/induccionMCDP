@@ -6,6 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { useForm } from "react-hook-form";
 import { toast } from "sonner";
 import { formatRut } from "@/lib/rut";
+import { isProvisionalEmail } from "@/lib/provisional-email";
 import { updateProfileSchema, type UpdateProfileInput } from "@/lib/validations/profile";
 import { updateProfileAction } from "@/server/actions/profile-actions";
 import { Button } from "@/components/ui/button";
@@ -89,6 +90,11 @@ export function ProfileForm({
             />
             {errors.corporateEmail ? (
               <p className="text-xs text-destructive">{errors.corporateEmail.message}</p>
+            ) : isProvisionalEmail(corporateEmail) ? (
+              <p className="text-xs font-medium text-amber-700">
+                Tu correo institucional actual es provisorio (generado con tu RUT). Cámbialo por tu correo
+                real, por ejemplo nombre.apellido@{institutionDomain}.
+              </p>
             ) : (
               <p className="text-xs text-muted-foreground">Opcional. Debe terminar en @{institutionDomain}.</p>
             )}

@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { KeyRound, Mail, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
+import { isProvisionalEmail, PROVISIONAL_EMAIL_MESSAGE } from "@/lib/provisional-email";
 import { setupInitialAccessAction } from "@/server/actions/auth-actions";
 import {
   Dialog,
@@ -37,7 +38,8 @@ export function FirstAccessModal({ user }: FirstAccessModalProps) {
   const [confirmPin, setConfirmPin] = useState("");
 
   const initialLocalPart = () => {
-    if (user.corporateEmail && user.corporateEmail.includes("@")) {
+    // El correo provisorio (generado con el RUT) no se precarga: debe ingresar el real.
+    if (user.corporateEmail && user.corporateEmail.includes("@") && !isProvisionalEmail(user.corporateEmail)) {
       return user.corporateEmail.split("@")[0] || "";
     }
     return "";
@@ -59,6 +61,10 @@ export function FirstAccessModal({ user }: FirstAccessModalProps) {
     }
 
     const trimmedLocal = emailLocalPart.trim().replace(/@.*$/, "");
+    if (trimmedLocal && isProvisionalEmail(`${trimmedLocal}@x`)) {
+      toast.error(PROVISIONAL_EMAIL_MESSAGE);
+      return;
+    }
     let finalCorporateEmail: string | undefined = undefined;
 
     if (trimmedLocal) {
@@ -163,7 +169,8 @@ export function FirstAccessModal({ user }: FirstAccessModalProps) {
               </span>
             </div>
             <p className="text-[11px] text-slate-500">
-              Tu correo oficial en <strong>{user.institution.name}</strong>.
+              Tu correo oficial en <strong>{user.institution.name}</strong> (ej. nombre.apellido). No uses
+              el provisorio con números de tu RUT.
             </p>
           </div>
 

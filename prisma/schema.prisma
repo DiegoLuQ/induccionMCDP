@@ -626,6 +626,9 @@ model CourseProgressHistory {
   finalScore    Int?
   startedAt     DateTime?
   completedAt   DateTime?
+  /// Videos vistos al archivar: [{ lessonId, isWatched, watchedSeconds, completedAt }].
+  /// Permite restaurar el avance exacto al volver a activar el período.
+  lessonProgress Json?
   archivedAt    DateTime       @default(now())
 
   user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
