@@ -84,6 +84,8 @@ interface JefaturaInviteTableProps {
   funcionarios: SearchFuncionarioItem[];
   /** userId -> courseId -> situación en el curso (período vigente). */
   courseStatus: Record<string, Record<string, StaffCourseStatus>>;
+  /** "Inducción activa" de la barra superior (curso preseleccionado). */
+  initialCourseId?: string | null;
 }
 
 interface EditableGroupData {
@@ -106,10 +108,11 @@ export function JefaturaInviteTable({
   areas,
   funcionarios,
   courseStatus,
+  initialCourseId,
 }: JefaturaInviteTableProps) {
   // Configuración general
   const [selectedCourseId, setSelectedCourseId] = useState<string>(
-    courses[0]?.id ?? "",
+    courses.find((c) => c.id === initialCourseId)?.id ?? courses[0]?.id ?? "",
   );
   const [expiresInHours, setExpiresInHours] = useState<number>(24);
   // Política: las invitaciones siempre exigen PIN.

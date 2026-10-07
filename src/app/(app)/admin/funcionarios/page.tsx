@@ -6,6 +6,7 @@ import { Plus } from "lucide-react";
 import { requireRole } from "@/lib/auth/session";
 import { getStaffDirectoryWithCourses } from "@/server/queries/funcionarios";
 import { getPublishedCourseOptions } from "@/server/queries/courses";
+import { getActiveCourse } from "@/lib/active-course";
 import { prisma } from "@/lib/prisma";
 import { PageHeader } from "@/components/shared/page-header";
 import { SyncFuncionariosButton } from "@/components/admin/sync-funcionarios-button";
@@ -51,6 +52,7 @@ export default async function StaffPage() {
           users={users}
           availableCourses={availableCourses}
           currentUserId={session.sub}
+          activeCourseId={(await getActiveCourse(session.institutionId)).activeCourseId}
         />
       </Suspense>
     </>

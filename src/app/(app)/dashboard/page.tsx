@@ -18,6 +18,7 @@ import { formatDateTime } from "@/lib/utils";
 import { formatRut } from "@/lib/rut";
 import { getAdminDashboard, getUserDashboard } from "@/server/queries/dashboard";
 import { getMandatoryCompliance } from "@/server/queries/mandatory";
+import { getActiveCourse } from "@/lib/active-course";
 import { MandatoryComplianceCards } from "@/components/admin/mandatory-compliance-cards";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
@@ -66,10 +67,14 @@ async function AdminDashboard({
   institutionId: string;
   name: string;
 }) {
-  const [data, mandatory] = await Promise.all([
+  const [data, mandatoryAll, { activeCourseId }] = await Promise.all([
     getAdminDashboard(institutionId),
     getMandatoryCompliance(institutionId),
+    getActiveCourse(institutionId),
   ]);
+  const mandatory = [...mandatoryAll].sort(
+    (a, b) => Number(b.id === activeCourseId) - Number(a.id === activeCourseId),
+  );
 
   return (
     <>
@@ -110,7 +115,7 @@ async function AdminDashboard({
         />
       </div>
 
-      <MandatoryComplianceCards courses={mandatory} />
+      <MandatoryComplianceCards courses={mandatory} activeCourseId={activeCourseId} />
 
       {data.pendingReviews > 0 && (
         <Card className="mt-6 border-warning/40">

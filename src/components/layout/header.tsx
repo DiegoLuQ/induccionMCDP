@@ -2,6 +2,7 @@ import type { Role } from "@prisma/client";
 import { MobileSidebar } from "./sidebar";
 import { UserMenu } from "./user-menu";
 import type { InstitutionOption } from "./institution-switcher";
+import { CourseSwitcher, type CourseSwitcherOption } from "./course-switcher";
 
 interface HeaderProps {
   name: string;
@@ -11,6 +12,9 @@ interface HeaderProps {
   positionName: string | null;
   institutions: InstitutionOption[];
   activeInstitutionId: string;
+  /** Cursos para el selector global de "Inducción activa" (vacío = no se muestra). */
+  courses: CourseSwitcherOption[];
+  activeCourseId: string | null;
 }
 
 export function Header({
@@ -21,6 +25,8 @@ export function Header({
   positionName,
   institutions,
   activeInstitutionId,
+  courses,
+  activeCourseId,
 }: HeaderProps) {
   const active = institutions.find((i) => i.id === activeInstitutionId);
 
@@ -43,12 +49,15 @@ export function Header({
         </div>
       </div>
 
-      <UserMenu
-        name={name}
-        email={email}
-        role={role}
-        positionName={positionName}
-      />
+      <div className="flex items-center gap-2">
+        {courses.length > 0 && <CourseSwitcher courses={courses} activeCourseId={activeCourseId} />}
+        <UserMenu
+          name={name}
+          email={email}
+          role={role}
+          positionName={positionName}
+        />
+      </div>
     </header>
   );
 }

@@ -2,13 +2,18 @@
 
 import { useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { inviteStaffToCourseAction } from "@/server/actions/report-actions";
+import { removeCourseFromUsersAction } from "@/server/actions/user-actions";
 import {
   CheckCircle2,
   Clock,
   Download,
-  Eye,
   FileDown,
   FileCheck2,
+  Mail,
+  Pencil,
+  RotateCcw,
   Search,
   Upload,
   Users,
@@ -79,12 +84,15 @@ export function ComplianceReport({
   courses,
   rows,
   initialCourseId,
+  canManage = false,
 }: {
   institutionName: string;
   courses: ComplianceCourse[];
   rows: ComplianceRow[];
   /** Curso a mostrar al abrir (p. ej. desde el Inicio). */
   initialCourseId?: string;
+  /** RRHH / Super Admin: puede invitar, reiniciar y editar desde el reporte. */
+  canManage?: boolean;
 }) {
   const [courseId, setCourseIdState] = useState(
     courses.find((c) => c.id === initialCourseId)?.id ?? courses[0]?.id ?? "",
@@ -105,6 +113,39 @@ export function ComplianceReport({
   const router = useRouter();
 
   const course = courses.find((c) => c.id === courseId);
+
+  const [busyUserId, setBusyUserId] = useState<string | null>(null);
+
+  async function inviteUser(userId: string, name: string) {
+    if (!window.confirm(`¿Enviar invitación por correo a ${name} para "${course?.title}"? Si tenía una vigente, se reemplaza.`)) return;
+    setBusyUserId(userId);
+    const result = await inviteStaffToCourseAction({ userId, courseId });
+    setBusyUserId(null);
+    if (result.success) {
+      toast.success(result.message ?? "Invitación enviada.");
+      router.refresh();
+    } else {
+      toast.error(result.message);
+    }
+  }
+
+  async function resetUser(userId: string, name: string) {
+    if (
+      !window.confirm(
+        `¿Quitar "${course?.title}" a ${name}? Se borran su avance, respuestas e invitaciones de este período para que lo haga de nuevo.`,
+      )
+    )
+      return;
+    setBusyUserId(userId);
+    const result = await removeCourseFromUsersAction({ userIds: [userId], courseId });
+    setBusyUserId(null);
+    if (result.success) {
+      toast.success(result.message ?? "Asignación quitada.");
+      router.refresh();
+    } else {
+      toast.error(result.message);
+    }
+  }
 
   function pickSignedFile(userId: string) {
     uploadUserId.current = userId;
@@ -381,7 +422,7 @@ export function ComplianceReport({
                   <TableHead className="w-36">Estado</TableHead>
                   <TableHead className="w-32">Completado</TableHead>
                   <TableHead className="w-16 text-right">Nota</TableHead>
-                  <TableHead className="w-44 pr-4">Constancia</TableHead>
+                  <TableHead className="w-48 pr-4 text-right">Gestionar</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -429,12 +470,17 @@ export function ComplianceReport({
                             <span className="text-xs text-muted-foreground">—</span>
                           )
                         ) : (
-                          <SignedCertificateCell
+                          <ManageCell
                             signed={x.row.signed[courseId] ?? null}
                             downloadUrl={`/api/constancia/descargar?userId=${x.row.id}&courseId=${courseId}`}
                             uploading={uploadingUserId === x.row.id}
-                            disabled={uploadingUserId !== null}
+                            disabled={uploadingUserId !== null || busyUserId !== null}
                             onUpload={() => pickSignedFile(x.row.id)}
+                            canManage={canManage}
+                            isAssigned={x.status !== "NOT_ASSIGNED"}
+                            editHref={`/admin/funcionarios/${x.row.id}`}
+                            onInvite={() => inviteUser(x.row.id, x.row.name)}
+                            onReset={() => resetUser(x.row.id, x.row.name)}
                           />
                         )}
                       </TableCell>
@@ -502,59 +548,90 @@ function SummaryCard({
 }
 
 /** Constancia del funcionario en el curso elegido: en blanco para firmar, subir la firmada o verla. */
-function SignedCertificateCell({
+function ManageCell({
   signed,
   downloadUrl,
   uploading,
   disabled,
   onUpload,
+  canManage,
+  isAssigned,
+  editHref,
+  onInvite,
+  onReset,
 }: {
   signed: { id: string; isPdf: boolean } | null;
   downloadUrl: string;
   uploading: boolean;
   disabled: boolean;
   onUpload: () => void;
+  /** RRHH / Super Admin: invitar, reiniciar y editar. El auditor sólo gestiona constancias. */
+  canManage: boolean;
+  isAssigned: boolean;
+  editHref: string;
+  onInvite: () => void;
+  onReset: () => void;
 }) {
+  const icon = "h-7 w-7 p-0";
   return (
-    <div className="flex flex-wrap items-center gap-1">
-      <Button asChild variant="outline" size="sm" className="h-7 gap-1 px-2 text-[11px]" title="Descargar constancia de participación para imprimir y firmar">
-        <a href={downloadUrl} target="_blank" rel="noreferrer">
-          <FileDown className="h-3.5 w-3.5" />
-          Constancia
+    <div className="flex items-center justify-end gap-0.5">
+      <Button asChild variant="ghost" size="sm" className={icon} title="Descargar constancia para imprimir y firmar">
+        <a href={downloadUrl} target="_blank" rel="noreferrer" aria-label="Descargar constancia">
+          <FileDown className="h-4 w-4" />
         </a>
       </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={icon}
+        title={signed ? "Reemplazar constancia firmada (PDF o JPG)" : "Subir constancia firmada (PDF o JPG)"}
+        aria-label="Subir constancia firmada"
+        disabled={disabled}
+        onClick={onUpload}
+      >
+        {uploading ? <span className="text-xs">⏳</span> : <Upload className="h-4 w-4" />}
+      </Button>
       {signed ? (
+        <Button asChild variant="ghost" size="sm" className={`${icon} text-emerald-700`} title="Ver constancia firmada">
+          <a href={`/api/constancias-firmadas/${signed.id}`} target="_blank" rel="noreferrer" aria-label="Ver constancia firmada">
+            <FileCheck2 className="h-4 w-4" />
+          </a>
+        </Button>
+      ) : (
+        <span className={`${icon} inline-flex items-center justify-center text-muted-foreground/40`} title="Aún no se sube la constancia firmada">
+          <FileCheck2 className="h-4 w-4" />
+        </span>
+      )}
+      {canManage && (
         <>
-          <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-1.5 text-[11px] text-emerald-700" title="Ver constancia firmada">
-            <a href={`/api/constancias-firmadas/${signed.id}`} target="_blank" rel="noreferrer">
-              <FileCheck2 className="h-3.5 w-3.5" />
-              Firmada
-              <Eye className="h-3 w-3" />
-            </a>
+          <Button
+            variant="ghost"
+            size="sm"
+            className={icon}
+            title="Enviar o reenviar invitación por correo"
+            aria-label="Invitar"
+            disabled={disabled}
+            onClick={onInvite}
+          >
+            <Mail className="h-4 w-4" />
           </Button>
           <Button
             variant="ghost"
             size="sm"
-            className="h-7 w-7 p-0"
-            title="Reemplazar constancia firmada"
-            disabled={disabled}
-            onClick={onUpload}
+            className={`${icon} text-destructive/80 hover:text-destructive`}
+            title={isAssigned ? "Quitar asignación y reiniciar (borra su avance y respuestas)" : "No tiene asignada esta inducción"}
+            aria-label="Quitar o reiniciar"
+            disabled={disabled || !isAssigned}
+            onClick={onReset}
           >
-            <Upload className="h-3.5 w-3.5" />
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+          <Button asChild variant="ghost" size="sm" className={icon} title="Editar funcionario">
+            <Link href={editHref} aria-label="Editar funcionario">
+              <Pencil className="h-4 w-4" />
+            </Link>
           </Button>
         </>
-      ) : (
-        <Button
-          variant="outline"
-          size="sm"
-          className="h-7 gap-1 px-2 text-[11px]"
-          title="Subir constancia firmada (PDF o JPG)"
-          disabled={disabled}
-          onClick={onUpload}
-        >
-          <Upload className="h-3.5 w-3.5" />
-          {uploading ? "Subiendo..." : "Subir firmada"}
-        </Button>
       )}
     </div>
   );

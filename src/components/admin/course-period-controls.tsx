@@ -2,9 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { AlertTriangle, CalendarClock } from "lucide-react";
+import { AlertTriangle, CalendarClock, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  deleteCoursePeriodAction,
   startNewCoursePeriodAction,
   updateCourseMandatoryAction,
 } from "@/server/actions/course-period-actions";
@@ -64,6 +65,7 @@ export function CoursePeriodControls({
   period,
   dueDate,
   activeCount,
+  archivedPeriods,
 }: {
   courseId: string;
   courseTitle: string;
@@ -72,6 +74,8 @@ export function CoursePeriodControls({
   dueDate: Date | string | null;
   /** Funcionarios con avance en el período vigente (lo que se archivará). */
   activeCount: number;
+  /** Períodos cerrados con datos archivados (historial y constancias). */
+  archivedPeriods: Array<{ period: number; history: number; certificates: number }>;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -80,6 +84,22 @@ export function CoursePeriodControls({
   const [due, setDue] = useState(toInputDate(dueDate));
   const [newPeriod, setNewPeriod] = useState(String(period + 1));
   const [confirmText, setConfirmText] = useState("");
+  const [deleting, setDeleting] = useState<number | null>(null);
+  const [deleteText, setDeleteText] = useState("");
+
+  function deletePeriod(periodToDelete: number) {
+    startTransition(async () => {
+      const result = await deleteCoursePeriodAction({ courseId, period: periodToDelete });
+      if (result.success) {
+        toast.success(result.message ?? "Período eliminado.", { duration: 8000 });
+        setDeleting(null);
+        setDeleteText("");
+        router.refresh();
+      } else {
+        toast.error(result.message);
+      }
+    });
+  }
 
   function saveMandatory() {
     startTransition(async () => {
@@ -209,6 +229,72 @@ export function CoursePeriodControls({
                 Iniciar período {newPeriod}
               </Button>
             </div>
+          </div>
+
+          {/* Períodos archivados */}
+          <Separator />
+          <div className="space-y-2">
+            <p className="text-sm font-semibold">Períodos archivados</p>
+            {archivedPeriods.length === 0 ? (
+              <p className="text-xs text-muted-foreground">Este curso aún no tiene períodos cerrados.</p>
+            ) : (
+              <ul className="space-y-2">
+                {archivedPeriods.map((item) => (
+                  <li key={item.period} className="rounded-md border p-2 text-xs">
+                    <div className="flex items-center justify-between gap-2">
+                      <span>
+                        <strong>Período {item.period}</strong> · {item.history} resultado(s) ·{" "}
+                        {item.certificates} constancia(s) firmada(s)
+                      </span>
+                      {deleting !== item.period && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-destructive hover:text-destructive"
+                          title={`Eliminar el período ${item.period}`}
+                          disabled={isPending}
+                          onClick={() => {
+                            setDeleting(item.period);
+                            setDeleteText("");
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
+                    {deleting === item.period && (
+                      <div className="mt-2 space-y-2">
+                        <p className="text-destructive">
+                          Se borrarán para siempre su historial, las respuestas archivadas y las constancias
+                          firmadas (con sus archivos) del período {item.period}.
+                        </p>
+                        <div className="flex items-center gap-2">
+                          <Input
+                            value={deleteText}
+                            onChange={(e) => setDeleteText(e.target.value)}
+                            placeholder={`Escribe ${item.period}`}
+                            className="h-8 w-32"
+                          />
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="h-8"
+                            isLoading={isPending}
+                            disabled={deleteText.trim() !== String(item.period)}
+                            onClick={() => deletePeriod(item.period)}
+                          >
+                            Eliminar
+                          </Button>
+                          <Button size="sm" variant="ghost" className="h-8" onClick={() => setDeleting(null)}>
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </DialogContent>
       </Dialog>

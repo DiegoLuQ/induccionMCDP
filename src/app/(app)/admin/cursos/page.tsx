@@ -44,6 +44,30 @@ export default async function AdminCoursesPage() {
       where: { institutionId: session.institutionId, isActive: true, role: { in: STAFF_ROLES } },
     }),
   ]);
+  // Períodos cerrados por curso (historial y constancias archivadas).
+  const [historyGroups, certificateGroups] = await Promise.all([
+    prisma.courseProgressHistory.groupBy({
+      by: ["courseId", "period"],
+      where: { course: { institutionId: session.institutionId } },
+      _count: { _all: true },
+    }),
+    prisma.signedCertificate.groupBy({
+      by: ["courseId", "archivedPeriod"],
+      where: { institutionId: session.institutionId, archivedPeriod: { gt: 0 } },
+      _count: { _all: true },
+    }),
+  ]);
+  const archivedByCourse = new Map<string, Map<number, { period: number; history: number; certificates: number }>>();
+  const entry = (courseId: string, period: number) => {
+    const byPeriod = archivedByCourse.get(courseId) ?? new Map();
+    archivedByCourse.set(courseId, byPeriod);
+    const item = byPeriod.get(period) ?? { period, history: 0, certificates: 0 };
+    byPeriod.set(period, item);
+    return item;
+  };
+  for (const g of historyGroups) entry(g.courseId, g.period).history = g._count._all;
+  for (const g of certificateGroups) entry(g.courseId, g.archivedPeriod).certificates = g._count._all;
+
   // Obligatorios primero; dentro de cada grupo, los más recientes.
   const courses = [...allCourses].sort((a, b) => Number(b.isMandatory) - Number(a.isMandatory));
 
@@ -190,6 +214,9 @@ export default async function AdminCoursesPage() {
                             period={period}
                             dueDate={course.dueDate}
                             activeCount={course.progress.length}
+                            archivedPeriods={[...(archivedByCourse.get(course.id)?.values() ?? [])].sort(
+                              (a, b) => b.period - a.period,
+                            )}
                           />
                           <PublishToggle
                             courseId={course.id}

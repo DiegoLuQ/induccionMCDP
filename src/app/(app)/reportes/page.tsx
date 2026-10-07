@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { getStaffScope } from "@/lib/auth/staff-scope";
 import { getInstitution } from "@/server/queries/institutions";
 import { getComplianceReport } from "@/server/queries/reports";
+import { getActiveCourse } from "@/lib/active-course";
 import { PageHeader } from "@/components/shared/page-header";
 import { ComplianceReport } from "@/components/reports/compliance-report";
 
@@ -16,8 +17,11 @@ export default async function ReportsPage({
 }: {
   searchParams: Promise<{ curso?: string }>;
 }) {
-  const { curso } = await searchParams;
   const session = await requireRole(Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.AUDITOR);
+  const { curso } = await searchParams;
+  const { activeCourseId } = await getActiveCourse(session.institutionId);
+  // Curso pedido por la URL (desde el Inicio) o, si no, la "Inducción activa".
+  const initialCourseId = curso ?? activeCourseId ?? undefined;
   // Un auditor que es jefatura sólo ve a los funcionarios de sus áreas;
   // un auditor sin áreas a cargo (y los administradores) ven a todos.
   const scope = await getStaffScope(session);
@@ -41,11 +45,12 @@ export default async function ReportsPage({
         }
       />
       <ComplianceReport
-        key={session.institutionId}
+        key={`${session.institutionId}:${initialCourseId ?? ""}`}
         institutionName={institutionName}
         courses={report.courses}
         rows={report.rows}
-        initialCourseId={curso}
+        initialCourseId={initialCourseId}
+        canManage={session.role === Role.SUPER_ADMIN || session.role === Role.ADMIN_RRHH}
       />
     </>
   );

@@ -15,7 +15,13 @@ function formatDue(value: Date): string {
 }
 
 /** Tarjetas de cumplimiento de los cursos obligatorios vigentes (Inicio de administradores). */
-export function MandatoryComplianceCards({ courses }: { courses: MandatoryCourseCompliance[] }) {
+export function MandatoryComplianceCards({
+  courses,
+  activeCourseId,
+}: {
+  courses: MandatoryCourseCompliance[];
+  activeCourseId?: string | null;
+}) {
   if (courses.length === 0) {
     return (
       <Card className="mt-6 border-dashed">
@@ -40,12 +46,13 @@ export function MandatoryComplianceCards({ courses }: { courses: MandatoryCourse
           const overdue = course.dueDate && new Date(course.dueDate) < new Date() && course.percent < 100;
           const pendingAreas = course.areas.filter((a) => a.completed < a.total);
           return (
-            <Card key={course.id}>
+            <Card key={course.id} className={course.id === activeCourseId ? "ring-2 ring-primary" : undefined}>
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between gap-2">
                   <div>
                     <CardTitle className="text-base">{course.title}</CardTitle>
                     <CardDescription className="flex flex-wrap items-center gap-1.5 pt-1">
+                      {course.id === activeCourseId && <Badge>Inducción activa</Badge>}
                       <Badge variant="outline">Período {course.period}</Badge>
                       {course.typeName && <Badge variant="secondary">{course.typeName}</Badge>}
                       {course.dueDate && (

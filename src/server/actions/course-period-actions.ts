@@ -148,3 +148,55 @@ export async function startNewCoursePeriodAction(input: {
     `Período ${previousPeriod} cerrado (${archived} registro(s) guardados en el historial). "${course.title}" quedó vigente para ${newPeriod}.`,
   );
 }
+
+/**
+ * Elimina por completo un período ya cerrado de un curso: su historial de
+ * resultados, las respuestas archivadas y las constancias firmadas de ese año
+ * (registro y archivo). No se puede eliminar el período vigente.
+ */
+export async function deleteCoursePeriodAction(input: {
+  courseId: string;
+  period: number;
+}): Promise<ActionResult<{ history: number; submissions: number; certificates: number }>> {
+  const course = await getAdminCourse(input?.courseId);
+  if (!course) return failure("Curso no encontrado o sin permisos.");
+
+  const period = Number(input.period);
+  if (!Number.isInteger(period) || period <= 0) return failure("Período inválido.");
+  if (period === effectivePeriod(course)) return failure("No se puede eliminar el período vigente.");
+
+  const evaluations = await prisma.evaluation.findMany({
+    where: { OR: [{ courseId: course.id }, { lesson: { courseId: course.id } }] },
+    select: { id: true },
+  });
+
+  const { counts, fileNames } = await prisma.$transaction(async (tx) => {
+    const certificates = await tx.signedCertificate.findMany({
+      where: { courseId: course.id, archivedPeriod: period },
+      select: { fileName: true },
+    });
+    const history = await tx.courseProgressHistory.deleteMany({ where: { courseId: course.id, period } });
+    const submissions =
+      evaluations.length > 0
+        ? await tx.evaluationSubmission.deleteMany({
+            where: { evaluationId: { in: evaluations.map((e) => e.id) }, archivedPeriod: period },
+          })
+        : { count: 0 };
+    const certs = await tx.signedCertificate.deleteMany({ where: { courseId: course.id, archivedPeriod: period } });
+    return {
+      counts: { history: history.count, submissions: submissions.count, certificates: certs.count },
+      fileNames: certificates.map((c) => c.fileName),
+    };
+  });
+
+  // Archivos de las constancias firmadas de ese período (tras confirmar el borrado en la BD).
+  const { deleteSignedCertificateFile } = await import("@/server/services/signed-certificate-files");
+  for (const fileName of fileNames) await deleteSignedCertificateFile(fileName);
+
+  revalidateCourses();
+  revalidatePath("/admin/constancias");
+  return success(
+    counts,
+    `Período ${period} eliminado: ${counts.history} resultado(s), ${counts.submissions} respuesta(s) y ${counts.certificates} constancia(s).`,
+  );
+}

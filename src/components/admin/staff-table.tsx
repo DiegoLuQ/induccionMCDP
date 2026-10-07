@@ -79,13 +79,17 @@ interface StaffTableProps {
   users: StaffDirectoryItem[];
   availableCourses: AvailableCourseOption[];
   currentUserId: string;
+  /** "Inducción activa" de la barra superior: su estado se muestra por funcionario. */
+  activeCourseId?: string | null;
 }
 
 export function StaffTable({
   users,
   availableCourses,
   currentUserId,
+  activeCourseId,
 }: StaffTableProps) {
+  const activeCourse = availableCourses.find((c) => c.id === activeCourseId) ?? null;
   const router = useRouter();
   const searchParams = useSearchParams();
   const initialQuery = searchParams.get("q") ?? "";
@@ -669,15 +673,33 @@ export function StaffTable({
                       {/* Lista de Inducciones / Cursos asignados */}
                       <TableCell className="py-2">
                         <div className="space-y-1.5">
-                          {user.courses.length === 0 ? (
-                            <span className="text-xs text-muted-foreground italic block">
-                              Sin inducciones asignadas
+                          {activeCourse &&
+                          !user.courses.some((c) => c.courseId === activeCourse.id) ? (
+                            // No tiene asignada la inducción activa.
+                            <span className="flex items-center justify-between gap-1.5 rounded-md border border-dashed px-2 py-1 text-xs">
+                              <span className="truncate text-[11px] font-medium">{activeCourse.title}</span>
+                              <Badge variant="outline" className="h-5 shrink-0 px-1.5 text-[10px]">
+                                No asignada
+                              </Badge>
                             </span>
+                          ) : null}
+                          {user.courses.length === 0 ? (
+                            !activeCourse && (
+                              <span className="text-xs text-muted-foreground italic block">
+                                Sin inducciones asignadas
+                              </span>
+                            )
                           ) : (
                             <>
-                              {user.courses[0] && (
+                              {(activeCourse
+                                ? user.courses.find((c) => c.courseId === activeCourse.id)
+                                : user.courses[0]) && (
                                 <CourseChip
-                                  course={user.courses[0]}
+                                  course={
+                                    (activeCourse
+                                      ? user.courses.find((c) => c.courseId === activeCourse.id)
+                                      : user.courses[0])!
+                                  }
                                   userId={user.id}
                                   disabled={isPending}
                                   onRemove={(c) =>
@@ -731,10 +753,12 @@ export function StaffTable({
                       <TableCell className="text-right pr-3">
                         <div className="flex items-center justify-end gap-1">
                           {(() => {
-                            // Constancia de su inducción más reciente; si no tiene ninguna
-                            // asignada, la de la inducción publicada del colegio (no es
+                            // Constancia de la "Inducción activa"; si no hay, la de su
+                            // inducción más reciente o la publicada del colegio (no es
                             // necesario haberla realizado).
-                            const course = user.courses[0]
+                            const course = activeCourse
+                              ? { id: activeCourse.id, title: activeCourse.title }
+                              : user.courses[0]
                               ? { id: user.courses[0].courseId, title: user.courses[0].courseTitle }
                               : availableCourses[0]
                                 ? { id: availableCourses[0].id, title: availableCourses[0].title }

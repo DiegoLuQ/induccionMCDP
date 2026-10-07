@@ -1,7 +1,9 @@
 import { redirect } from "next/navigation";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
+import { Role } from "@prisma/client";
 import { getAccessibleInstitutions } from "@/server/queries/institutions";
+import { getActiveCourse } from "@/lib/active-course";
 import { DesktopSidebar } from "@/components/layout/sidebar";
 import { Header } from "@/components/layout/header";
 import { FirstAccessModal } from "@/components/auth/first-access-modal";
@@ -41,6 +43,10 @@ export default async function AppLayout({
 
   const needsFirstAccessSetup = Boolean(userRecord && !userRecord.passwordHash);
 
+  // Selector global de "Inducción activa" (no aplica a funcionarios).
+  const activeCourse =
+    session.role === Role.FUNCIONARIO ? null : await getActiveCourse(activeInstitutionId);
+
   return (
     <div className="flex min-h-screen">
       <DesktopSidebar
@@ -59,6 +65,8 @@ export default async function AppLayout({
           positionName={session.positionName}
           institutions={institutions}
           activeInstitutionId={activeInstitutionId}
+          courses={activeCourse?.courses ?? []}
+          activeCourseId={activeCourse?.activeCourseId ?? null}
         />
         <main className="flex-1 px-4 py-6 lg:px-8">{children}</main>
       </div>

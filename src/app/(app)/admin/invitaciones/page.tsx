@@ -4,6 +4,7 @@ import { requireRole } from "@/lib/auth/session";
 import { SIN_ASIGNAR } from "@/lib/constants";
 import { getInstitution } from "@/server/queries/institutions";
 import { getPublishedCourseOptions, getStaffCourseStatus } from "@/server/queries/courses";
+import { getActiveCourse } from "@/lib/active-course";
 import { getInvitations } from "@/server/queries/invitations";
 import { getAreas, getPositions } from "@/server/queries/catalog";
 import { getActiveFuncionariosForInstitution } from "@/server/queries/funcionarios";
@@ -25,6 +26,7 @@ export default async function InvitationsPage() {
     getActiveFuncionariosForInstitution(session.institutionId),
     getStaffCourseStatus(session.institutionId),
   ]);
+  const { activeCourseId } = await getActiveCourse(session.institutionId);
 
   return (
     <>
@@ -35,6 +37,8 @@ export default async function InvitationsPage() {
 
       <div className="space-y-8">
         <JefaturaInviteTable
+          key={activeCourseId ?? "sin-curso"}
+          initialCourseId={activeCourseId}
           courses={courses}
           institutionDomain={institution?.domain ?? "colegio.cl"}
           positions={positions.map((p) => ({
