@@ -76,6 +76,7 @@ export async function recalculateCourseProgress(
           where: {
             userId,
             evaluationId: { in: evaluationIds },
+            archivedPeriod: 0, // sólo el período vigente
           },
           select: { evaluationId: true, score: true, status: true, answers: true },
           orderBy: { createdAt: "desc" },

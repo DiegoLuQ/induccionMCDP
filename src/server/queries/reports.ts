@@ -1,6 +1,5 @@
 import "server-only";
 
-import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { STAFF_ROLES } from "@/lib/auth/rbac";
 
@@ -10,6 +9,11 @@ export interface ComplianceCourse {
   id: string;
   title: string;
   typeName: string | null;
+  isMandatory: boolean;
+  /** Período vigente del curso. */
+  period: number;
+  /** Períodos cerrados con historial disponible (más reciente primero). */
+  pastPeriods: number[];
 }
 
 export interface ComplianceRow {
@@ -26,6 +30,13 @@ export interface ComplianceRow {
   >;
   /** Constancia firmada subida por curso (courseId -> datos). */
   signed: Record<string, { id: string; isPdf: boolean }>;
+  /** Historial de períodos cerrados: "courseId:período" -> resultado. */
+  history: Record<
+    string,
+    { status: Exclude<ComplianceStatus, "NOT_ASSIGNED">; completedAt: Date | null; finalScore: number | null }
+  >;
+  /** Constancias firmadas archivadas: "courseId:período" -> datos. */
+  signedHistory: Record<string, { id: string; isPdf: boolean }>;
 }
 
 /** Minúsculas, sin tildes y con espacios simples, para comparar nombres y correos. */
@@ -91,8 +102,17 @@ export async function getComplianceReport(
   const [courses, users] = await Promise.all([
     prisma.course.findMany({
       where: { institutionId, isPublished: true },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, title: true, type: { select: { name: true } } },
+      // Obligatorios primero.
+      orderBy: [{ isMandatory: "desc" }, { createdAt: "desc" }],
+      select: {
+        id: true,
+        title: true,
+        isMandatory: true,
+        currentPeriod: true,
+        createdAt: true,
+        type: { select: { name: true } },
+        progressHistory: { distinct: ["period"], select: { period: true }, orderBy: { period: "desc" } },
+      },
     }),
     prisma.user.findMany({
       where: {
@@ -114,14 +134,24 @@ export async function getComplianceReport(
           select: { courseId: true, status: true, completedAt: true, finalScore: true },
         },
         signedCertificates: {
-          select: { id: true, courseId: true, mimeType: true },
+          select: { id: true, courseId: true, mimeType: true, archivedPeriod: true },
+        },
+        progressHistory: {
+          select: { courseId: true, period: true, status: true, completedAt: true, finalScore: true },
         },
       },
     }),
   ]);
 
   return {
-    courses: courses.map((c) => ({ id: c.id, title: c.title, typeName: c.type?.name ?? null })),
+    courses: courses.map((c) => ({
+      id: c.id,
+      title: c.title,
+      typeName: c.type?.name ?? null,
+      isMandatory: c.isMandatory,
+      period: c.currentPeriod ?? c.createdAt.getFullYear(),
+      pastPeriods: c.progressHistory.map((h) => h.period),
+    })),
     rows: users.map((u) => ({
       id: u.id,
       name: u.name,
@@ -136,7 +166,20 @@ export async function getComplianceReport(
         ]),
       ),
       signed: Object.fromEntries(
-        u.signedCertificates.map((s) => [s.courseId, { id: s.id, isPdf: s.mimeType === "application/pdf" }]),
+        u.signedCertificates
+          .filter((s) => s.archivedPeriod === 0)
+          .map((s) => [s.courseId, { id: s.id, isPdf: s.mimeType === "application/pdf" }]),
+      ),
+      history: Object.fromEntries(
+        u.progressHistory.map((h) => [
+          `${h.courseId}:${h.period}`,
+          { status: h.status, completedAt: h.completedAt, finalScore: h.finalScore },
+        ]),
+      ),
+      signedHistory: Object.fromEntries(
+        u.signedCertificates
+          .filter((s) => s.archivedPeriod > 0)
+          .map((s) => [`${s.courseId}:${s.archivedPeriod}`, { id: s.id, isPdf: s.mimeType === "application/pdf" }]),
       ),
     })),
   };

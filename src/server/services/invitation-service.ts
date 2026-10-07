@@ -12,6 +12,12 @@ import {
 import { MAX_PIN_ATTEMPTS } from "@/lib/constants";
 import { sendMail } from "@/lib/mail/mailer";
 import { buildCertificateLink } from "@/lib/auth/certificate-token";
+import { encryptText } from "@/lib/auth/reversible-crypto";
+import {
+  buildPortalUrl,
+  ensureInstitutionShortCode,
+  rotateAreaPortalKey,
+} from "@/server/services/area-portal";
 import {
   invitationEmail,
   consolidatedInvitationEmail,
@@ -40,7 +46,7 @@ export interface InvitationIssueError {
   reason: string;
 }
 
-function buildInvitationLink(token: string): string {
+export function buildInvitationLink(token: string): string {
   const base = process.env.APP_URL ?? "http://localhost:3000";
   return `${base.replace(/\/$/, "")}/auth/invitation?token=${token}`;
 }
@@ -73,7 +79,8 @@ export async function issueInvitations(params: {
   /** Dominio del colegio: sólo elige la cuenta remitente; el funcionario puede tener cualquier correo. */
   const institutionDomain = course.institution.domain.toLowerCase();
   const expiresAt = invitationExpiryDate(params.expiresInHours);
-  const requiresPin = params.requiresPin ?? true;
+  // Política: toda invitación exige PIN de 6 dígitos (no hay acceso directo).
+  const requiresPin = true;
 
   const issued: IssuedInvitation[] = [];
   const errors: InvitationIssueError[] = [];
@@ -145,6 +152,8 @@ export async function issueInvitations(params: {
             institutionId: params.institutionId,
             tokenHash,
             pinHash,
+            pinEncrypted: pin ? encryptText(pin) : null,
+            tokenEncrypted: encryptText(token),
             requiresPin,
             sentToEmail: targetEmail,
             ccEmails: ccList.length > 0 ? ccList.join(", ") : null,
@@ -177,6 +186,7 @@ export async function issueInvitations(params: {
           link,
           pin,
           expiresAt,
+          certificateUrl: await buildCertificateLink({ userId: invitation.user.id, courseId: course.id }),
         });
 
         emailSent = await sendMail({
@@ -222,6 +232,8 @@ export interface ConsolidatedGroupResult {
   emailSent: boolean;
   issued: IssuedInvitation[];
   errors: InvitationIssueError[];
+  /** Portal de jefatura del área (dirección corta + clave enviada en el correo). */
+  portal?: { url: string; key: string } | null;
 }
 
 export interface IssueConsolidatedResult {
@@ -254,7 +266,8 @@ export async function issueConsolidatedInvitations(params: {
   /** Dominio del colegio: sólo elige la cuenta remitente; el funcionario puede tener cualquier correo. */
   const institutionDomain = course.institution.domain.toLowerCase();
   const expiresAt = invitationExpiryDate(params.expiresInHours);
-  const requiresPin = params.requiresPin ?? true;
+  // Política: toda invitación exige PIN de 6 dígitos (no hay acceso directo).
+  const requiresPin = true;
 
   const positions = await prisma.position.findMany({
     where: { institutionId: params.institutionId },
@@ -300,6 +313,8 @@ export async function issueConsolidatedInvitations(params: {
               institutionId: params.institutionId,
               tokenHash,
               pinHash,
+              pinEncrypted: pin ? encryptText(pin) : null,
+              tokenEncrypted: encryptText(token),
               requiresPin,
               sentToEmail: group.sendToJefe && group.jefeEmail ? group.jefeEmail : invitee.email,
               ccEmails: group.asistenteEmail || null,
@@ -358,6 +373,7 @@ export async function issueConsolidatedInvitations(params: {
     let emailSent = false;
     let targetEmail: string | null = null;
     const ccList: string[] = [];
+    let portal: { url: string; key: string } | null = null;
 
     if (params.sendEmail !== false && groupIssued.length > 0) {
       const isForJefe = Boolean(group.sendToJefe && group.jefeEmail);
@@ -397,6 +413,25 @@ export async function issueConsolidatedInvitations(params: {
         ccList.push(...Array.from(ccSet));
 
         if (targetEmail) {
+          // Portal de jefatura: clave nueva en cada envío (invalida la anterior).
+          if (group.areaId) {
+            try {
+              const area = await prisma.area.findFirst({
+                where: { id: group.areaId, institutionId: params.institutionId },
+                select: { id: true, slug: true },
+              });
+              if (area) {
+                const shortCode = await ensureInstitutionShortCode(params.institutionId);
+                portal = {
+                  url: buildPortalUrl(shortCode, area.slug),
+                  key: await rotateAreaPortalKey(area.id),
+                };
+              }
+            } catch (err) {
+              console.error("[consolidated-invitations] No se pudo preparar el portal del área:", err);
+            }
+          }
+
           const mail = consolidatedInvitationEmail({
             recipientName: group.jefeNombre,
             areaName: group.areaName,
@@ -405,6 +440,7 @@ export async function issueConsolidatedInvitations(params: {
             courseTitle: course.title,
             funcionarios: consolidatedItems,
             expiresAt,
+            portal,
           });
 
           emailSent = await sendMail({
@@ -432,6 +468,7 @@ export async function issueConsolidatedInvitations(params: {
               link: item.link,
               pin: item.pin,
               expiresAt,
+              certificateUrl: await buildCertificateLink({ userId: item.userId, courseId: course.id }),
             });
 
             const sent = await sendMail({
@@ -461,6 +498,7 @@ export async function issueConsolidatedInvitations(params: {
       emailSent,
       issued: groupIssued,
       errors: groupErrors,
+      portal,
     });
   }
 
@@ -606,7 +644,8 @@ export async function redeemInvitation(
   await prisma.$transaction([
     prisma.invitation.update({
       where: { id: invitation.id },
-      data: { isUsed: true, usedAt: new Date(), attempts: 0 },
+      // El PIN y el token cifrados sólo sirven mientras no se usa: se eliminan.
+      data: { isUsed: true, usedAt: new Date(), attempts: 0, pinEncrypted: null, tokenEncrypted: null },
     }),
     prisma.user.update({
       where: { id: invitation.userId },
@@ -660,7 +699,8 @@ export async function reissueInvitation(
   if (!previous) throw new Error("La invitación no existe en este colegio.");
 
   const { token, tokenHash } = generateInvitationToken();
-  const requiresPin = previous.requiresPin;
+  // Al reenviar también se exige PIN, aunque la invitación original no lo tuviera.
+  const requiresPin = true;
   const pin = requiresPin ? generatePin() : null;
   const pinHash = pin ? await hashSecret(pin) : null;
   const expiresAt = invitationExpiryDate(expiresInHours);
@@ -677,6 +717,8 @@ export async function reissueInvitation(
         institutionId,
         tokenHash,
         pinHash,
+        pinEncrypted: pin ? encryptText(pin) : null,
+        tokenEncrypted: encryptText(token),
         requiresPin,
         sentToEmail: previous.sentToEmail,
         ccEmails: previous.ccEmails,
@@ -701,6 +743,7 @@ export async function reissueInvitation(
     link,
     pin,
     expiresAt,
+    certificateUrl: await buildCertificateLink({ userId: previous.userId, courseId: previous.courseId }),
   });
 
   const emailSent = await sendMail({

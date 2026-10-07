@@ -136,7 +136,7 @@ export function InviteForm({
     resolver: zodResolver(createInvitationsSchema),
     defaultValues: {
       courseId: courses[0]?.id ?? "",
-      requiresPin: false, // Por defecto enlace directo
+      requiresPin: true, // Siempre con PIN (obligatorio)
       expiresInHours: MIN_INVITATION_TTL_HOURS, // Por defecto 24h
       invitees: [],
     },
@@ -149,7 +149,6 @@ export function InviteForm({
 
   const courseId = watch("courseId");
   const expiresInHours = watch("expiresInHours");
-  const requiresPin = watch("requiresPin");
 
   // Filtrado reactivo de funcionarios para la barra de búsqueda
   const filteredFuncionarios = useMemo(() => {
@@ -544,17 +543,8 @@ export function InviteForm({
                 <KeyRound className="h-3.5 w-3.5 text-muted-foreground" />
                 Seguridad de acceso
               </Label>
-              <div className="flex h-10 items-center justify-between rounded-md border px-3 bg-background">
-                <span className="text-xs">
-                  {requiresPin ? "Exigir PIN de 6 dígitos" : "Acceso directo (Sin PIN)"}
-                </span>
-                <input
-                  type="checkbox"
-                  checked={requiresPin}
-                  onChange={(e) => setValue("requiresPin", e.target.checked)}
-                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
-                  title="Activar para solicitar PIN de 6 dígitos"
-                />
+              <div className="flex h-10 items-center rounded-md border px-3 bg-muted/40">
+                <span className="text-xs">PIN de 6 dígitos (obligatorio)</span>
               </div>
             </div>
           </div>

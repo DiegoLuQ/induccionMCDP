@@ -43,6 +43,7 @@ export const getAdminDashboard = cache(async (institutionId: string) => {
       where: {
         status: SubmissionStatus.PENDING_REVIEW,
         user: { institutionId },
+        archivedPeriod: 0, // sólo el período vigente
       },
     }),
     prisma.courseProgress.findMany({
@@ -190,7 +191,7 @@ export const getLikertReport = cache(
     if (questions.length === 0) return [];
 
     const submissions = await prisma.evaluationSubmission.findMany({
-      where: { evaluationId: { in: questions.map((q) => q.evaluationId) } },
+      where: { evaluationId: { in: questions.map((q) => q.evaluationId) }, archivedPeriod: 0 },
       select: { answers: true },
     });
 
@@ -246,6 +247,7 @@ export const getPendingReviews = cache(async (institutionId: string) =>
     where: {
       status: SubmissionStatus.PENDING_REVIEW,
       user: { institutionId },
+      archivedPeriod: 0, // sólo el período vigente
     },
     orderBy: { createdAt: "asc" },
     include: {

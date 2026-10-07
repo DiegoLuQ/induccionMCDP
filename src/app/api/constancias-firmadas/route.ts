@@ -63,13 +63,13 @@ export async function POST(request: NextRequest) {
   const fileName = await saveSignedCertificateFile(buffer, kind);
 
   const previous = await prisma.signedCertificate.findUnique({
-    where: { userId_courseId: { userId, courseId } },
+    where: { userId_courseId_archivedPeriod: { userId, courseId, archivedPeriod: 0 } },
     select: { fileName: true },
   });
 
   try {
     await prisma.signedCertificate.upsert({
-      where: { userId_courseId: { userId, courseId } },
+      where: { userId_courseId_archivedPeriod: { userId, courseId, archivedPeriod: 0 } },
       create: {
         institutionId: session.institutionId,
         userId,

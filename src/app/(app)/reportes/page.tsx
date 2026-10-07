@@ -11,7 +11,12 @@ export const metadata: Metadata = { title: "Reporte de inducciones" };
 export const dynamic = "force-dynamic";
 
 /** Reporte de sólo lectura: quién completó cada inducción y quién no. */
-export default async function ReportsPage() {
+export default async function ReportsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ curso?: string }>;
+}) {
+  const { curso } = await searchParams;
   const session = await requireRole(Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.AUDITOR);
   // Un auditor que es jefatura sólo ve a los funcionarios de sus áreas;
   // un auditor sin áreas a cargo (y los administradores) ven a todos.
@@ -40,6 +45,7 @@ export default async function ReportsPage() {
         institutionName={institutionName}
         courses={report.courses}
         rows={report.rows}
+        initialCourseId={curso}
       />
     </>
   );

@@ -75,6 +75,8 @@ export async function createCourseAction(
         videoFormat: parsed.data.videoFormat,
         isSequential: parsed.data.isSequential,
         isPublished: parsed.data.isPublished,
+        // El curso nace vigente para el año en curso (se reutiliza con "Iniciar nuevo período").
+        currentPeriod: new Date().getFullYear(),
         targetPositions: {
           connect: parsed.data.targetPositionIds.map((id) => ({ id })),
         },

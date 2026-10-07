@@ -49,6 +49,15 @@ const STATUS_LABELS: Record<ComplianceStatus, string> = {
 
 const ALL_AREAS = "__todas__";
 
+/** Orden de la tabla: lo que requiere seguimiento primero, lo completado al final. */
+const STATUS_ORDER: Record<ComplianceStatus, number> = {
+  IN_PROGRESS: 0,
+  PENDING: 1,
+  NOT_ASSIGNED: 2,
+  FAILED: 3,
+  COMPLETED: 4,
+};
+
 /** Las fechas se guardan como medianoche UTC (fecha de ingreso) o con hora (completado). */
 function formatDate(value: Date | string | null, utc = false): string {
   if (!value) return "";
@@ -69,12 +78,24 @@ export function ComplianceReport({
   institutionName,
   courses,
   rows,
+  initialCourseId,
 }: {
   institutionName: string;
   courses: ComplianceCourse[];
   rows: ComplianceRow[];
+  /** Curso a mostrar al abrir (p. ej. desde el Inicio). */
+  initialCourseId?: string;
 }) {
-  const [courseId, setCourseId] = useState(courses[0]?.id ?? "");
+  const [courseId, setCourseIdState] = useState(
+    courses.find((c) => c.id === initialCourseId)?.id ?? courses[0]?.id ?? "",
+  );
+  // "current" = período vigente; un número = período cerrado (historial, sólo lectura).
+  const [period, setPeriod] = useState<"current" | number>("current");
+  const isHistory = period !== "current";
+  function setCourseId(id: string) {
+    setCourseIdState(id);
+    setPeriod("current");
+  }
   const [filter, setFilter] = useState<Filter>("ALL");
   const [area, setArea] = useState(ALL_AREAS);
   const [search, setSearch] = useState("");
@@ -135,7 +156,7 @@ export function ComplianceReport({
   const withStatus = useMemo(
     () =>
       rows.map((row) => {
-        const p = row.progress[courseId];
+        const p = isHistory ? row.history[`${courseId}:${period}`] : row.progress[courseId];
         return {
           row,
           status: (p?.status ?? "NOT_ASSIGNED") as ComplianceStatus,
@@ -143,7 +164,7 @@ export function ComplianceReport({
           finalScore: p?.finalScore ?? null,
         };
       }),
-    [rows, courseId],
+    [rows, courseId, period, isHistory],
   );
 
   const inArea = useMemo(
@@ -178,7 +199,13 @@ export function ComplianceReport({
           x.row.positionName?.toLowerCase().includes(query),
       );
     }
-    return list;
+    // Primero quienes requieren seguimiento (en proceso, pendientes, no asignados),
+    // al final los que ya completaron; dentro de cada grupo, por nombre.
+    return [...list].sort(
+      (a, b) =>
+        STATUS_ORDER[a.status] - STATUS_ORDER[b.status] ||
+        a.row.name.localeCompare(b.row.name, "es", { sensitivity: "base" }),
+    );
   }, [inArea, filter, search]);
 
   function exportCsv() {
@@ -207,7 +234,7 @@ export function ComplianceReport({
         STATUS_LABELS[x.status],
         formatDate(x.completedAt),
         x.finalScore ?? "",
-        x.row.signed[courseId] ? "Sí" : "No",
+        (isHistory ? x.row.signedHistory[`${courseId}:${period}`] : x.row.signed[courseId]) ? "Sí" : "No",
       ]
         .map(csvCell)
         .join(";"),
@@ -254,11 +281,29 @@ export function ComplianceReport({
               {courses.map((c) => (
                 <SelectItem key={c.id} value={c.id}>
                   {c.title}
-                  {c.typeName ? ` · ${c.typeName}` : ""}
+                  {c.isMandatory ? " · Obligatorio" : c.typeName ? ` · ${c.typeName}` : ""}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
+          {course && (
+            <Select
+              value={String(period)}
+              onValueChange={(value) => setPeriod(value === "current" ? "current" : Number(value))}
+            >
+              <SelectTrigger className="lg:w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="current">Período {course.period} (vigente)</SelectItem>
+                {course.pastPeriods.map((p) => (
+                  <SelectItem key={p} value={String(p)}>
+                    Período {p} (historial)
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
           <Select value={area} onValueChange={setArea}>
             <SelectTrigger className="lg:w-56">
               <SelectValue />
@@ -368,13 +413,30 @@ export function ComplianceReport({
                         {x.finalScore !== null ? `${x.finalScore}%` : "—"}
                       </TableCell>
                       <TableCell className="pr-4">
-                        <SignedCertificateCell
-                          signed={x.row.signed[courseId] ?? null}
-                          downloadUrl={`/api/constancia/descargar?userId=${x.row.id}&courseId=${courseId}`}
-                          uploading={uploadingUserId === x.row.id}
-                          disabled={uploadingUserId !== null}
-                          onUpload={() => pickSignedFile(x.row.id)}
-                        />
+                        {isHistory ? (
+                          x.row.signedHistory[`${courseId}:${period}`] ? (
+                            <Button asChild variant="ghost" size="sm" className="h-7 gap-1 px-1.5 text-[11px] text-emerald-700">
+                              <a
+                                href={`/api/constancias-firmadas/${x.row.signedHistory[`${courseId}:${period}`]!.id}`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                <FileCheck2 className="h-3.5 w-3.5" />
+                                Firmada
+                              </a>
+                            </Button>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">—</span>
+                          )
+                        ) : (
+                          <SignedCertificateCell
+                            signed={x.row.signed[courseId] ?? null}
+                            downloadUrl={`/api/constancia/descargar?userId=${x.row.id}&courseId=${courseId}`}
+                            uploading={uploadingUserId === x.row.id}
+                            disabled={uploadingUserId !== null}
+                            onUpload={() => pickSignedFile(x.row.id)}
+                          />
+                        )}
                       </TableCell>
                     </TableRow>
                   ))

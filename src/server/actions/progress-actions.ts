@@ -222,6 +222,7 @@ export async function deleteCourseProgressAction(
       prisma.evaluationSubmission.deleteMany({
         where: {
           userId: progress.userId,
+          archivedPeriod: 0, // sólo el período vigente
           OR: [
             { evaluation: { courseId: progress.courseId } },
             { evaluation: { lesson: { courseId: progress.courseId } } },
@@ -254,6 +255,7 @@ export async function resetAllCourseProgressAction(): Promise<ActionResult<{ del
         }),
         prisma.evaluationSubmission.deleteMany({
           where: {
+            archivedPeriod: 0, // sólo el período vigente
             OR: [
               { evaluation: { course: { institutionId: session.institutionId } } },
               {
@@ -442,6 +444,7 @@ export async function getCourseProgressDetailAction(
       where: {
         userId: cp.userId,
         evaluationId: { in: evalIds },
+        archivedPeriod: 0, // sólo el período vigente
       },
       orderBy: { createdAt: "desc" },
     });

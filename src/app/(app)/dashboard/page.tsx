@@ -17,6 +17,8 @@ import { SIN_ASIGNAR } from "@/lib/constants";
 import { formatDateTime } from "@/lib/utils";
 import { formatRut } from "@/lib/rut";
 import { getAdminDashboard, getUserDashboard } from "@/server/queries/dashboard";
+import { getMandatoryCompliance } from "@/server/queries/mandatory";
+import { MandatoryComplianceCards } from "@/components/admin/mandatory-compliance-cards";
 import { PageHeader } from "@/components/shared/page-header";
 import { StatCard } from "@/components/shared/stat-card";
 import { ProgressBadge } from "@/components/shared/status-badge";
@@ -64,7 +66,10 @@ async function AdminDashboard({
   institutionId: string;
   name: string;
 }) {
-  const data = await getAdminDashboard(institutionId);
+  const [data, mandatory] = await Promise.all([
+    getAdminDashboard(institutionId),
+    getMandatoryCompliance(institutionId),
+  ]);
 
   return (
     <>
@@ -104,6 +109,8 @@ async function AdminDashboard({
           tone={data.expiredInvitations > 0 ? "warning" : "default"}
         />
       </div>
+
+      <MandatoryComplianceCards courses={mandatory} />
 
       {data.pendingReviews > 0 && (
         <Card className="mt-6 border-warning/40">

@@ -3,7 +3,8 @@ import { SESSION_COOKIE } from "@/lib/constants";
 import { verifySession } from "@/lib/auth/jwt";
 import { ROUTE_GUARDS } from "@/lib/auth/rbac";
 
-const PUBLIC_PATHS = ["/", "/login", "/auth/invitation", "/denegado"];
+// /induccion: portal de jefatura (protegido por su propia clave de área).
+const PUBLIC_PATHS = ["/", "/login", "/auth/invitation", "/denegado", "/induccion"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

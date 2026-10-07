@@ -171,6 +171,7 @@ export const getCoursePlayerData = cache(
       prisma.evaluationSubmission.findMany({
         where: {
           userId,
+          archivedPeriod: 0, // sólo el período vigente
           OR: [
             { evaluation: { courseId } },
             { evaluation: { lesson: { courseId } } },
@@ -504,7 +505,41 @@ export const getTags = cache(async (institutionId: string) =>
 export const getPublishedCourseOptions = cache(async (institutionId: string) =>
   prisma.course.findMany({
     where: { institutionId, isPublished: true },
-    orderBy: { title: "asc" },
-    select: { id: true, title: true, type: true },
+    // Obligatorios primero.
+    orderBy: [{ isMandatory: "desc" }, { title: "asc" }],
+    select: { id: true, title: true, type: true, isMandatory: true, currentPeriod: true },
   }),
 );
+
+export type StaffCourseStatus = "COMPLETED" | "IN_PROGRESS" | "PENDING" | "INVITED" | "NONE";
+
+/**
+ * Situación de cada funcionario en cada curso publicado del período vigente:
+ * avance (completado / en curso / pendiente) o, si no tiene avance, si tiene
+ * una invitación vigente sin usar. Se usa para invitar sólo a quienes faltan.
+ */
+export async function getStaffCourseStatus(
+  institutionId: string,
+): Promise<Record<string, Record<string, StaffCourseStatus>>> {
+  const now = new Date();
+  const [progress, invitations] = await Promise.all([
+    prisma.courseProgress.findMany({
+      where: { course: { institutionId, isPublished: true } },
+      select: { userId: true, courseId: true, status: true },
+    }),
+    prisma.invitation.findMany({
+      where: { institutionId, isUsed: false, expiresAt: { gt: now }, course: { isPublished: true } },
+      select: { userId: true, courseId: true },
+    }),
+  ]);
+
+  const result: Record<string, Record<string, StaffCourseStatus>> = {};
+  for (const inv of invitations) {
+    (result[inv.userId] ??= {})[inv.courseId] = "INVITED";
+  }
+  // El avance tiene prioridad sobre la invitación.
+  for (const p of progress) {
+    (result[p.userId] ??= {})[p.courseId] = p.status;
+  }
+  return result;
+}

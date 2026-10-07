@@ -7,6 +7,11 @@ import { SIN_ASIGNAR } from "@/lib/constants";
 import { prisma } from "@/lib/prisma";
 import { formatDuration } from "@/lib/utils";
 import { getAdminCourses } from "@/server/queries/courses";
+import { STAFF_ROLES } from "@/lib/auth/rbac";
+import {
+  CoursePeriodBadge,
+  CoursePeriodControls,
+} from "@/components/admin/course-period-controls";
 import { PageHeader } from "@/components/shared/page-header";
 import {
   DeleteCourseButton,
@@ -33,12 +38,14 @@ const FORMAT_LABELS: Record<VideoFormat, string> = {
 
 export default async function AdminCoursesPage() {
   const session = await requireRole(Role.SUPER_ADMIN, Role.ADMIN_RRHH);
-  const [courses, activeStaffCount] = await Promise.all([
+  const [allCourses, activeStaffCount] = await Promise.all([
     getAdminCourses(session.institutionId),
     prisma.user.count({
-      where: { institutionId: session.institutionId, isActive: true },
+      where: { institutionId: session.institutionId, isActive: true, role: { in: STAFF_ROLES } },
     }),
   ]);
+  // Obligatorios primero; dentro de cada grupo, los más recientes.
+  const courses = [...allCourses].sort((a, b) => Number(b.isMandatory) - Number(a.isMandatory));
 
   return (
     <>
@@ -78,6 +85,7 @@ export default async function AdminCoursesPage() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Inducción</TableHead>
+                  <TableHead>Obligatoriedad</TableHead>
                   <TableHead>Categoría</TableHead>
                   <TableHead>Formato</TableHead>
                   <TableHead>Duración</TableHead>
@@ -90,6 +98,7 @@ export default async function AdminCoursesPage() {
                   const completed = course.progress.filter(
                     (p) => p.status === "COMPLETED",
                   ).length;
+                  const period = course.currentPeriod ?? course.createdAt.getFullYear();
                   const totalSeconds = course.lessons.reduce(
                     (sum, lesson) => sum + lesson.durationSeconds,
                     0,
@@ -122,6 +131,13 @@ export default async function AdminCoursesPage() {
                             ))}
                           </span>
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <CoursePeriodBadge
+                          isMandatory={course.isMandatory}
+                          period={period}
+                          dueDate={course.dueDate}
+                        />
                       </TableCell>
                       <TableCell>
                         {course.category ? (
@@ -167,6 +183,14 @@ export default async function AdminCoursesPage() {
                               <span className="sr-only">Vista previa</span>
                             </Link>
                           </Button>
+                          <CoursePeriodControls
+                            courseId={course.id}
+                            courseTitle={course.title}
+                            isMandatory={course.isMandatory}
+                            period={period}
+                            dueDate={course.dueDate}
+                            activeCount={course.progress.length}
+                          />
                           <PublishToggle
                             courseId={course.id}
                             isPublished={course.isPublished}

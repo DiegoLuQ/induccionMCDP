@@ -66,6 +66,8 @@ interface SignedCertificateItem {
   originalSize: number;
   updatedAt: Date;
   uploadedByName: string | null;
+  /** 0 = período vigente; otro valor = año archivado (historial). */
+  archivedPeriod: number;
 }
 
 const STATUS_LABELS: Record<ProgressStatus, string> = {
@@ -122,7 +124,11 @@ export function SignedCertificatesManager({
   const userById = useMemo(() => new Map(users.map((u) => [u.id, u])), [users]);
   const courseById = useMemo(() => new Map(courses.map((c) => [c.id, c])), [courses]);
   const certByKey = useMemo(
-    () => new Map(certificates.map((c) => [`${c.userId}:${c.courseId}`, c])),
+    // Sólo las del período vigente se pueden reemplazar; las archivadas son historial.
+    () =>
+      new Map(
+        certificates.filter((c) => c.archivedPeriod === 0).map((c) => [`${c.userId}:${c.courseId}`, c]),
+      ),
     [certificates],
   );
 
@@ -478,7 +484,18 @@ export function SignedCertificatesManager({
                             {user ? formatRut(user.rut) : ""}
                           </span>
                         </TableCell>
-                        <TableCell className="text-sm">{courseById.get(cert.courseId)?.title ?? "—"}</TableCell>
+                        <TableCell className="text-sm">
+                          {courseById.get(cert.courseId)?.title ?? "—"}
+                          {cert.archivedPeriod > 0 ? (
+                            <Badge variant="secondary" className="ml-2 text-[10px]">
+                              Período {cert.archivedPeriod} (historial)
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="ml-2 text-[10px]">
+                              Vigente
+                            </Badge>
+                          )}
+                        </TableCell>
                         <TableCell className="text-xs">
                           <span className="block">
                             {cert.isPdf ? "PDF" : "JPG"} · {formatBytes(cert.size)}

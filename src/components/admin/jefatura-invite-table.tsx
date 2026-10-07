@@ -46,7 +46,19 @@ export interface CourseOption {
   id: string;
   title: string;
   type?: unknown;
+  isMandatory?: boolean;
+  currentPeriod?: number | null;
 }
+
+type StaffCourseStatus = "COMPLETED" | "IN_PROGRESS" | "PENDING" | "INVITED" | "NONE";
+
+const COURSE_STATUS_BADGE: Record<StaffCourseStatus, { label: string; className: string }> = {
+  COMPLETED: { label: "Ya completó", className: "bg-emerald-50 text-emerald-700 border-emerald-200" },
+  IN_PROGRESS: { label: "En curso", className: "bg-blue-50 text-blue-700 border-blue-200" },
+  PENDING: { label: "Asignado sin empezar", className: "bg-amber-50 text-amber-800 border-amber-200" },
+  INVITED: { label: "Invitación vigente", className: "bg-violet-50 text-violet-700 border-violet-200" },
+  NONE: { label: "Sin invitación", className: "bg-slate-50 text-slate-600 border-slate-200" },
+};
 
 interface AreaOption {
   id: string;
@@ -70,6 +82,8 @@ interface JefaturaInviteTableProps {
   positions: PositionOption[];
   areas: AreaOption[];
   funcionarios: SearchFuncionarioItem[];
+  /** userId -> courseId -> situación en el curso (período vigente). */
+  courseStatus: Record<string, Record<string, StaffCourseStatus>>;
 }
 
 interface EditableGroupData {
@@ -91,13 +105,16 @@ export function JefaturaInviteTable({
   positions,
   areas,
   funcionarios,
+  courseStatus,
 }: JefaturaInviteTableProps) {
   // Configuración general
   const [selectedCourseId, setSelectedCourseId] = useState<string>(
     courses[0]?.id ?? "",
   );
   const [expiresInHours, setExpiresInHours] = useState<number>(24);
-  const [requiresPin, setRequiresPin] = useState<boolean>(true);
+  // Política: las invitaciones siempre exigen PIN.
+  const requiresPin = true;
+  // true: sólo quienes NO han completado el curso elegido.
   const [onlyUnassigned, setOnlyUnassigned] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
 
@@ -166,11 +183,33 @@ export function JefaturaInviteTable({
     };
   };
 
+  /** Situación del funcionario en el curso elegido. */
+  const statusOf = (userId: string): StaffCourseStatus =>
+    courseStatus[userId]?.[selectedCourseId] ?? "NONE";
+
+  /** Quien ya completó el curso nunca se incluye en un envío. */
+  const isSendable = (userId: string, excluded: Set<string>) =>
+    !excluded.has(userId) && statusOf(userId) !== "COMPLETED";
+
+  // Pendientes y total por área (sin filtros de búsqueda), para los contadores.
+  const areaCounters = useMemo(() => {
+    const map = new Map<string, { pending: number; total: number }>();
+    for (const f of funcionarios) {
+      const key = resolveJefatura(f).areaId;
+      const entry = map.get(key) ?? { pending: 0, total: 0 };
+      entry.total += 1;
+      if ((courseStatus[f.id]?.[selectedCourseId] ?? "NONE") !== "COMPLETED") entry.pending += 1;
+      map.set(key, entry);
+    }
+    return map;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [funcionarios, courseStatus, selectedCourseId]);
+
   // Filtrar funcionarios según búsqueda y switch de inducciones asignadas
   const filteredFuncionarios = useMemo(() => {
     let list = funcionarios;
     if (onlyUnassigned) {
-      list = list.filter((f) => f.coursesCount === 0);
+      list = list.filter((f) => statusOf(f.id) !== "COMPLETED");
     }
 
     if (!searchQuery.trim()) return list;
@@ -188,7 +227,8 @@ export function JefaturaInviteTable({
         (cleanRut && f.rut.replace(/[^0-9kK]/g, "").includes(cleanRut));
       return matchName || matchEmail || matchCargo || matchArea || matchRut;
     });
-  }, [funcionarios, onlyUnassigned, searchQuery]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [funcionarios, onlyUnassigned, searchQuery, selectedCourseId, courseStatus]);
 
   // Agrupación de los funcionarios por Jefatura / Área
   const groups = useMemo(() => {
@@ -330,7 +370,7 @@ export function JefaturaInviteTable({
 
       const groupData = getGroupData(key);
       const excluded = excludedStaff[key] || new Set<string>();
-      const activeStaff = grp.staff.filter((s) => !excluded.has(s.id));
+      const activeStaff = grp.staff.filter((s) => isSendable(s.id, excluded));
 
       if (activeStaff.length === 0) continue;
 
@@ -687,6 +727,7 @@ export function JefaturaInviteTable({
                   courses.map((c) => (
                     <option key={c.id} value={c.id}>
                       {c.title}
+                      {c.isMandatory ? ` · Obligatorio${c.currentPeriod ? ` ${c.currentPeriod}` : ""}` : ""}
                     </option>
                   ))
                 )}
@@ -716,15 +757,9 @@ export function JefaturaInviteTable({
                 <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
                 Validación de Seguridad
               </Label>
-              <label className="flex items-center gap-2 text-sm text-slate-800 h-10 px-3 border border-slate-200 rounded-md bg-slate-50 cursor-pointer hover:bg-slate-100 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={requiresPin}
-                  onChange={(e) => setRequiresPin(e.target.checked)}
-                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
-                />
-                <span className="font-medium">Exigir PIN de 6 dígitos al ingresar</span>
-              </label>
+              <div className="flex items-center gap-2 text-sm text-slate-800 h-10 px-3 border border-slate-200 rounded-md bg-slate-50">
+                <span className="font-medium">PIN de 6 dígitos (obligatorio)</span>
+              </div>
             </div>
           </div>
 
@@ -749,7 +784,7 @@ export function JefaturaInviteTable({
                   onChange={(e) => setOnlyUnassigned(e.target.checked)}
                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5"
                 />
-                <span>Solo funcionarios sin inducción</span>
+                <span>Solo pendientes de este curso</span>
               </label>
             </div>
 
@@ -828,7 +863,7 @@ export function JefaturaInviteTable({
             <h3 className="text-base font-semibold text-slate-800">No se encontraron funcionarios</h3>
             <p className="text-sm text-slate-500 max-w-md mx-auto mt-1">
               {onlyUnassigned
-                ? "Todos los funcionarios activos ya cuentan con inducciones asignadas o no coinciden con la búsqueda."
+                ? "Todos los funcionarios activos ya completaron este curso o no coinciden con la búsqueda."
                 : "No hay funcionarios que coincidan con los filtros aplicados."}
             </p>
             {onlyUnassigned && (
@@ -838,7 +873,7 @@ export function JefaturaInviteTable({
                 onClick={() => setOnlyUnassigned(false)}
                 className="mt-4 text-xs"
               >
-                Ver todos los funcionarios
+                Ver también a quienes ya lo completaron
               </Button>
             )}
           </Card>
@@ -850,7 +885,8 @@ export function JefaturaInviteTable({
             const isSinJefatura = group.key === "_sin_jefatura";
 
             const excluded = excludedStaff[group.key] || new Set<string>();
-            const activeStaffCount = group.staff.filter((s) => !excluded.has(s.id)).length;
+            const activeStaffCount = group.staff.filter((s) => isSendable(s.id, excluded)).length;
+            const counters = areaCounters.get(group.key) ?? { pending: 0, total: 0 };
             const isCurrentProcessing = processingGroupKey === group.key;
 
             return (
@@ -902,6 +938,19 @@ export function JefaturaInviteTable({
                           >
                             {activeStaffCount} funcionario{activeStaffCount === 1 ? "" : "s"}
                             {excluded.size > 0 && ` (${excluded.size} excluido)`}
+                          </Badge>
+                          <Badge
+                            variant="outline"
+                            className={`text-xs font-semibold ${
+                              counters.pending === 0
+                                ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                : "bg-white text-slate-700 border-slate-300"
+                            }`}
+                            title="Pendientes del curso seleccionado en esta área"
+                          >
+                            {counters.pending === 0
+                              ? "Área al día ✓"
+                              : `${counters.pending} pendiente${counters.pending === 1 ? "" : "s"} de ${counters.total}`}
                           </Badge>
                           {isSinJefatura && (
                             <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200">
@@ -1072,7 +1121,9 @@ export function JefaturaInviteTable({
                                 <td className="py-2.5 px-3 text-center">
                                   <input
                                     type="checkbox"
-                                    checked={!isExcluded}
+                                    checked={!isExcluded && statusOf(staff.id) !== "COMPLETED"}
+                                    disabled={statusOf(staff.id) === "COMPLETED"}
+                                    title={statusOf(staff.id) === "COMPLETED" ? "Ya completó este curso: no se le envía" : undefined}
                                     onChange={() => toggleStaffExclusion(group.key, staff.id)}
                                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 w-3.5 h-3.5 cursor-pointer"
                                   />
@@ -1090,21 +1141,12 @@ export function JefaturaInviteTable({
                                   {staff.email}
                                 </td>
                                 <td className="py-2.5 px-3 text-center">
-                                  {staff.coursesCount === 0 ? (
-                                    <Badge
-                                      variant="secondary"
-                                      className="bg-amber-50 text-amber-800 border-amber-200 text-[10px]"
-                                    >
-                                      Nuevo (Sin inducción)
-                                    </Badge>
-                                  ) : (
-                                    <Badge
-                                      variant="outline"
-                                      className="bg-slate-50 text-slate-600 text-[10px]"
-                                    >
-                                      {staff.coursesCount} curso(s) previo(s)
-                                    </Badge>
-                                  )}
+                                  <Badge
+                                    variant="outline"
+                                    className={`text-[10px] ${COURSE_STATUS_BADGE[statusOf(staff.id)].className}`}
+                                  >
+                                    {COURSE_STATUS_BADGE[statusOf(staff.id)].label}
+                                  </Badge>
                                 </td>
                                 <td className="py-2.5 px-3 text-center">
                                   {generated ? (
@@ -1197,6 +1239,18 @@ export function JefaturaInviteTable({
                     <p className="text-[11px] text-slate-500 mb-2">
                       Con copia (CC) a: {grp.ccEmails.join(", ")}
                     </p>
+                  )}
+
+                  {grp.portal && (
+                    <div className="mb-2 rounded border border-blue-200 bg-blue-50 p-2 text-[11px] text-blue-900">
+                      <span className="font-semibold">Portal del área:</span>{" "}
+                      <a href={grp.portal.url} target="_blank" rel="noreferrer" className="underline">
+                        {grp.portal.url.replace(/^https?:\/\//, "")}
+                      </a>
+                      {" · "}
+                      <span className="font-semibold">Clave:</span>{" "}
+                      <span className="font-mono font-bold tracking-wider">{grp.portal.key}</span>
+                    </div>
                   )}
 
                   <div className="space-y-1.5">
@@ -1310,7 +1364,7 @@ export function JefaturaInviteTable({
                 if (!grp) return null;
                 const groupData = getGroupData(key);
                 const excluded = excludedStaff[key] || new Set<string>();
-                const activeStaff = grp.staff.filter((s) => !excluded.has(s.id));
+                const activeStaff = grp.staff.filter((s) => isSendable(s.id, excluded));
                 const isSinJef = key === "_sin_jefatura";
 
                 return (

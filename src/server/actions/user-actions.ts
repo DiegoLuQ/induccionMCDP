@@ -461,6 +461,7 @@ export async function removeCourseFromUsersAction({
             where: {
               userId: { in: userIds },
               evaluationId: { in: evaluationIds },
+              archivedPeriod: 0, // sólo el período vigente
             },
           }),
         ]

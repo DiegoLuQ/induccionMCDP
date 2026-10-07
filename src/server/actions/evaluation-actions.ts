@@ -58,7 +58,8 @@ export async function submitEvaluationAction(
   if (!courseId) return failure("La evaluación no está asociada a un curso.");
 
   const previousAttempts = await prisma.evaluationSubmission.findMany({
-    where: { userId: session.sub, evaluationId: evaluation.id },
+    // Sólo intentos del período vigente (los archivados no cuentan).
+    where: { userId: session.sub, evaluationId: evaluation.id, archivedPeriod: 0 },
     orderBy: { attempt: "desc" },
     select: { attempt: true, status: true },
   });

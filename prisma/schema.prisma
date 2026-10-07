@@ -63,6 +63,8 @@ model Institution {
   id        String   @id @default(cuid())
   name      String   @db.VarChar(160)
   slug      String   @unique @db.VarChar(80)
+  /// Código corto para direcciones fáciles de dictar (ej. "dp" en /induccion/dp-utp).
+  shortCode String?  @unique @db.VarChar(12)
   /// Dominio institucional permitido para el registro/invitación (ej. colegiomacaya.cl)
   domain    String   @unique @db.VarChar(120)
   /// Imagen o logo del establecimiento (URL).
@@ -172,6 +174,12 @@ model Area {
   jefeEmail      String?  @db.VarChar(500)
   /// Correo de asistente / secretaria de área para copia (CC)
   asistenteEmail String?  @db.VarChar(500)
+  /// Clave del portal de jefatura (/induccion/[colegio]-[área]), hash bcrypt.
+  /// Se renueva en cada envío de invitaciones a la jefatura.
+  portalKeyHash        String?   @db.VarChar(255)
+  portalKeyIssuedAt    DateTime?
+  portalFailedAttempts Int       @default(0)
+  portalLockedUntil    DateTime?
   orderIndex     Int      @default(0)
   isActive       Boolean  @default(true)
   createdAt      DateTime @default(now())
@@ -267,6 +275,7 @@ model User {
   reviewedSubmissions   EvaluationSubmission[] @relation("SubmissionReviewer")
   signedCertificates    SignedCertificate[]
   uploadedCertificates  SignedCertificate[]    @relation("SignedCertificateUploader")
+  progressHistory       CourseProgressHistory[]
 
   @@unique([institutionId, rut])
   @@unique([institutionId, email])
@@ -314,6 +323,13 @@ model Course {
   /// true => las lecciones deben verse en orden (microaprendizaje secuencial).
   isSequential  Boolean     @default(true)
   isPublished   Boolean     @default(false)
+  /// Curso obligatorio para todos los funcionarios activos (se mide por área).
+  isMandatory   Boolean     @default(false)
+  /// Período (año) vigente. El mismo curso se reutiliza cada año: al iniciar un
+  /// período nuevo, el avance del anterior se archiva en CourseProgressHistory.
+  currentPeriod Int?
+  /// Fecha límite opcional para completar el curso en el período vigente.
+  dueDate       DateTime?   @db.Date
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
 
@@ -330,6 +346,7 @@ model Course {
   progress    CourseProgress[]
   autoInvitationConfigs AutoInvitationConfig[]
   signedCertificates    SignedCertificate[]
+  progressHistory       CourseProgressHistory[]
 
   @@index([institutionId, isPublished])
   @@index([categoryId])
@@ -443,6 +460,10 @@ model Invitation {
   tokenHash     String   @unique @db.VarChar(64)
   /// Hash bcrypt del PIN de 6 dígitos. Nulo si no se requiere PIN para acceder.
   pinHash       String?  @db.VarChar(255)
+  /// PIN y token cifrados (AES-GCM, reversible) para mostrarlos en el portal de
+  /// jefatura mientras la invitación está vigente. Se borran al canjearla.
+  pinEncrypted   String? @db.VarChar(255)
+  tokenEncrypted String? @db.VarChar(255)
   /// true => exige validar PIN de 6 dígitos; false => enlace directo sin PIN
   requiresPin   Boolean  @default(true)
   /// Correo principal al que se despachó la invitación (ej. jefe de área o funcionario)
@@ -531,7 +552,11 @@ model EvaluationSubmission {
   evaluation Evaluation @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
   reviewedBy User?      @relation("SubmissionReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
 
-  @@unique([userId, evaluationId, attempt])
+  /// 0 = período vigente. Al iniciar un período nuevo se guarda aquí el año
+  /// archivado y la respuesta deja de contar para el avance actual.
+  archivedPeriod Int @default(0)
+
+  @@unique([userId, evaluationId, attempt, archivedPeriod])
   @@index([evaluationId, status])
   @@index([userId, createdAt])
   @@map("evaluation_submissions")
@@ -572,6 +597,8 @@ model SignedCertificate {
   size          Int
   originalSize  Int
   uploadedById  String?
+  /// 0 = período vigente; al iniciar un período nuevo se guarda el año archivado.
+  archivedPeriod Int     @default(0)
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -580,7 +607,31 @@ model SignedCertificate {
   course      Course      @relation(fields: [courseId], references: [id], onDelete: Cascade)
   uploadedBy  User?       @relation("SignedCertificateUploader", fields: [uploadedById], references: [id], onDelete: SetNull)
 
-  @@unique([userId, courseId])
+  @@unique([userId, courseId, archivedPeriod])
+  /// Índice propio para la clave foránea de userId (MySQL lo exige al cambiar el único).
+  @@index([userId])
   @@index([institutionId])
   @@map("signed_certificates")
+}
+
+/// Resultado de un funcionario en un curso para un período ya cerrado
+/// (se crea al "Iniciar nuevo período" del curso).
+model CourseProgressHistory {
+  id            String         @id @default(cuid())
+  institutionId String
+  userId        String
+  courseId      String
+  period        Int
+  status        ProgressStatus
+  finalScore    Int?
+  startedAt     DateTime?
+  completedAt   DateTime?
+  archivedAt    DateTime       @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, courseId, period])
+  @@index([courseId, period])
+  @@map("course_progress_history")
 }

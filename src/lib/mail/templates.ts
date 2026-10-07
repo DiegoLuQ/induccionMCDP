@@ -10,6 +10,8 @@ interface InvitationMailParams {
   link: string;
   pin?: string | null;
   expiresAt: Date;
+  /** Enlace temporal (7 días) para descargar la Constancia de Participación. */
+  certificateUrl?: string | null;
 }
 
 function formatCl(date: Date): string {
@@ -18,6 +20,44 @@ function formatCl(date: Date): string {
     timeStyle: "short",
     timeZone: "America/Santiago",
   }).format(date);
+}
+
+/** Pasos del proceso de inducción, iguales en el correo a jefatura y al funcionario. */
+function inductionSteps(): string[] {
+  return [
+    "Abrir el enlace de la inducción e ingresar el código PIN.",
+    "En el primer ingreso, crear su clave personal y registrar su correo institucional.",
+    "Ingresar a la inducción y ver todos los videos de cada cápsula.",
+    "Responder las preguntas de las evaluaciones.",
+    "Confirmar que terminó la inducción (botón de finalización al completar todo).",
+    "Imprimir la Constancia de Participación y firmarla.",
+    "Escanear la constancia firmada y enviarla a Recursos Humanos, que la sube a la plataforma.",
+  ];
+}
+
+function inductionStepsHtml(title: string, note?: string): string {
+  const items = inductionSteps()
+    .map(
+      (step, i) => `
+        <tr>
+          <td valign="top" style="padding:4px 10px 4px 0;width:26px;">
+            <span style="display:inline-block;width:22px;height:22px;line-height:22px;border-radius:11px;background:#0f172a;color:#ffffff;font-size:12px;font-weight:700;text-align:center;">${i + 1}</span>
+          </td>
+          <td valign="top" style="padding:4px 0;font-size:14px;line-height:1.5;color:#334155;">${step}</td>
+        </tr>`,
+    )
+    .join("");
+  return `
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 18px;margin:20px 0;">
+          <p style="margin:0 0 10px;font-size:15px;font-weight:700;color:#0f172a;">${title}</p>
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">${items}
+          </table>
+          ${note ? `<p style="margin:10px 0 0;font-size:12px;color:#64748b;">${note}</p>` : ""}
+        </div>`;
+}
+
+function inductionStepsText(title: string): string[] {
+  return [title, ...inductionSteps().map((step, i) => `  ${i + 1}. ${step}`)];
 }
 
 export function invitationEmail(params: InvitationMailParams): {
@@ -86,6 +126,22 @@ export function invitationEmail(params: InvitationMailParams): {
         </div>`
         }
 
+        ${inductionStepsHtml(isJefe ? "Pasos que debe seguir el funcionario" : "Paso a paso")}
+
+        ${
+          params.certificateUrl
+            ? `<p style="text-align:center;margin:0 0 8px;">
+          <a href="${params.certificateUrl}" target="_blank"
+             style="display:inline-block;background:#ecfdf5;color:#047857;border:1px solid #a7f3d0;text-decoration:none;padding:10px 20px;border-radius:8px;font-weight:600;font-size:14px;">
+            Descargar constancia para firmar (PDF)
+          </a>
+        </p>
+        <p style="margin:0 0 8px;font-size:12px;color:#64748b;text-align:center;">
+          Disponible por 7 días. Si el enlace venció, solicita la constancia a Recursos Humanos.
+        </p>`
+            : ""
+        }
+
         <p style="margin:20px 0 0;font-size:13px;color:#64748b;">
           Este enlace tiene vigencia hasta el <strong>${formatCl(params.expiresAt)}</strong>.
         </p>
@@ -102,7 +158,7 @@ export function invitationEmail(params: InvitationMailParams): {
       ? `Estimado(a) ${params.recipientName} (Jefatura de Área):`
       : `Hola ${params.name},`,
     ``,
-    explanation,
+    explanation.replace(/<[^>]+>/g, "").replace(/&laquo;/g, "«").replace(/&raquo;/g, "»"),
     `Enlace de acceso: ${params.link}`,
   ];
 
@@ -110,7 +166,15 @@ export function invitationEmail(params: InvitationMailParams): {
     textLines.push(`Código PIN: ${params.pin}`);
   }
 
-  textLines.push(`Vigencia hasta: ${formatCl(params.expiresAt)}`);
+  textLines.push(
+    ``,
+    ...inductionStepsText(isJefe ? "Pasos que debe seguir el funcionario:" : "Paso a paso:"),
+  );
+  if (params.certificateUrl) {
+    textLines.push(``, `Constancia para firmar (7 días): ${params.certificateUrl}`);
+  }
+
+  textLines.push(``, `Vigencia hasta: ${formatCl(params.expiresAt)}`);
 
   return { subject, html, text: textLines.join("\n") };
 }
@@ -152,6 +216,8 @@ export interface ConsolidatedInvitationMailParams {
   courseTitle: string;
   funcionarios: ConsolidatedFuncionarioItem[];
   expiresAt: Date;
+  /** Portal de jefatura: dirección corta y clave del área. */
+  portal?: { url: string; key: string } | null;
 }
 
 /**
@@ -252,6 +318,27 @@ export function consolidatedInvitationEmail(params: ConsolidatedInvitationMailPa
           </table>
         </div>
 
+        ${
+          params.portal
+            ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:10px;padding:16px 18px;margin:0 0 20px;">
+          <p style="margin:0 0 6px;font-size:15px;font-weight:700;color:#1e3a8a;">Portal de su área (ideal para el laboratorio)</p>
+          <p style="margin:0 0 10px;font-size:13px;color:#334155;">
+            Vea en una sola página los accesos vigentes de su área (nombre, RUT, PIN, enlace y constancia). Escriba esta dirección en cualquier navegador e ingrese la clave:
+          </p>
+          <p style="margin:0 0 4px;font-size:16px;"><a href="${params.portal.url}" style="color:#1d4ed8;font-weight:700;">${params.portal.url.replace(/^https?:\/\//, "")}</a></p>
+          <p style="margin:0;font-size:14px;color:#0f172a;">Clave de acceso: <strong style="font-family:monospace;font-size:18px;letter-spacing:.12em;">${params.portal.key}</strong></p>
+          <p style="margin:8px 0 0;font-size:11px;color:#64748b;">La clave cambia con cada nuevo envío a su área. No la comparta fuera de la jefatura.</p>
+        </div>`
+            : ""
+        }
+
+        ${inductionStepsHtml(
+          "Instrucciones para cada funcionario",
+          params.funcionarios.some((f) => f.certificateUrl)
+            ? "En el paso 6, la constancia de cada funcionario se descarga con el botón «Descargar constancia (PDF)» de la tabla."
+            : undefined,
+        )}
+
         <p style="margin:0;font-size:13px;color:#64748b;">
           ⏰ Estos enlaces tienen vigencia hasta el <strong>${formatCl(params.expiresAt)}</strong>.
         </p>
@@ -279,6 +366,12 @@ export function consolidatedInvitationEmail(params: ConsolidatedInvitationMailPa
       (f) =>
         `* ${f.name} (${f.rut}) - Cargo: ${f.positionName || "N/A"}\n  Enlace: ${f.link}${f.pin ? ` | PIN: ${f.pin}` : ""}${f.certificateUrl ? `\n  Constancia (7 días): ${f.certificateUrl}` : ""}`,
     ),
+    ``,
+    ...(params.portal
+      ? [``, `Portal de su área: ${params.portal.url}`, `Clave de acceso: ${params.portal.key}`]
+      : []),
+    ``,
+    ...inductionStepsText("Instrucciones para cada funcionario:"),
     ``,
     `Vigencia hasta: ${formatCl(params.expiresAt)}`,
   ];
