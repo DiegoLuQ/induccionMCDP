@@ -42,7 +42,7 @@ export default async function AreaPortalPage({ params }: { params: Promise<{ cod
         </header>
 
         {allowed ? (
-          <PortalAccessTable rows={await getAreaPortalRows(area)} areaName={area.name} />
+          <PortalAccessTable rows={await getAreaPortalRows(area)} areaName={area.name} code={codigo} />
         ) : (
           <PortalKeyForm code={codigo} />
         )}

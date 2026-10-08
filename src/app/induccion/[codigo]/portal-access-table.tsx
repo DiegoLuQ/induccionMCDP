@@ -1,7 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { Copy, Printer, Search } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { CheckCircle2, Copy, Printer, Search, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { formatRut } from "@/lib/rut";
 import type { PortalAccessRow, PortalAccessStatus } from "@/server/services/area-portal";
@@ -24,8 +25,104 @@ const STATUS: Record<PortalAccessStatus, { label: string; className: string }> =
   BLOCKED: { label: "Bloqueada (pedir a RRHH)", className: "border-red-500 bg-red-50 text-red-700" },
 };
 
-export function PortalAccessTable({ rows, areaName }: { rows: PortalAccessRow[]; areaName: string }) {
+const MAX_BYTES = 20 * 1024 * 1024;
+
+function formatBytes(bytes: number): string {
+  return bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
+interface UploadResponse {
+  error?: string;
+  message?: string;
+  size?: number;
+  originalSize?: number;
+  optimized?: boolean;
+}
+
+/** Sube con XMLHttpRequest para mostrar el avance (fetch no informa el progreso de subida). */
+function uploadWithProgress(url: string, body: FormData, onProgress: (percent: number) => void) {
+  return new Promise<{ ok: boolean; data: UploadResponse }>((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", url);
+    xhr.upload.onprogress = (event) => {
+      if (event.lengthComputable) onProgress(Math.round((event.loaded / event.total) * 100));
+    };
+    xhr.onload = () => {
+      let data: UploadResponse = {};
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        data = { error: xhr.status === 413 ? "El archivo es demasiado grande." : undefined };
+      }
+      resolve({ ok: xhr.status >= 200 && xhr.status < 300, data });
+    };
+    xhr.onerror = () => reject(new Error("network"));
+    xhr.send(body);
+  });
+}
+
+export function PortalAccessTable({
+  rows,
+  areaName,
+  code,
+}: {
+  rows: PortalAccessRow[];
+  areaName: string;
+  /** Código del portal ("dp-utp"), para la ruta de constancias. */
+  code: string;
+}) {
+  const router = useRouter();
   const [search, setSearch] = useState("");
+  const fileInput = useRef<HTMLInputElement>(null);
+  const uploadTarget = useRef<PortalAccessRow | null>(null);
+  /** Fila subiendo y su avance (0-100; 100 = optimizando en el servidor). */
+  const [uploading, setUploading] = useState<{ id: string; percent: number } | null>(null);
+  const constanciaUrl = `/induccion/${encodeURIComponent(code)}/constancia`;
+
+  function pickFile(row: PortalAccessRow) {
+    uploadTarget.current = row;
+    fileInput.current?.click();
+  }
+
+  async function handleFile(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    event.target.value = "";
+    const row = uploadTarget.current;
+    if (!file || !row) return;
+
+    if (file.type !== "application/pdf" && !/\.pdf$/i.test(file.name)) {
+      toast.error("La constancia firmada debe ser un archivo PDF.");
+      return;
+    }
+    if (file.size > MAX_BYTES) {
+      toast.error(`El PDF pesa ${formatBytes(file.size)}; el máximo es 20 MB. Escanéalo con menor resolución.`);
+      return;
+    }
+
+    setUploading({ id: row.invitationId, percent: 0 });
+    try {
+      const body = new FormData();
+      body.append("file", file);
+      body.append("invitationId", row.invitationId);
+      const { ok, data } = await uploadWithProgress(constanciaUrl, body, (percent) =>
+        setUploading({ id: row.invitationId, percent }),
+      );
+      if (!ok) {
+        toast.error(data.error ?? "No se pudo subir la constancia.");
+        return;
+      }
+      const weight =
+        data.optimized && data.originalSize && data.size && data.originalSize > data.size
+          ? ` Optimizada: ${formatBytes(data.originalSize)} → ${formatBytes(data.size)}.`
+          : "";
+      toast.success(`${data.message ?? "Constancia guardada."}${weight}`, { duration: 6000 });
+      router.refresh();
+    } catch {
+      toast.error("Error de conexión al subir la constancia. Inténtalo de nuevo.");
+    } finally {
+      setUploading(null);
+    }
+  }
 
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -85,7 +182,7 @@ export function PortalAccessTable({ rows, areaName }: { rows: PortalAccessRow[];
                   <TableHead className="w-28">PIN</TableHead>
                   <TableHead className="min-w-[260px]">Enlace</TableHead>
                   <TableHead className="w-40">Estado</TableHead>
-                  <TableHead className="w-36 print:hidden">Constancia</TableHead>
+                  <TableHead className="w-44 print:hidden">Constancia</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -132,12 +229,57 @@ export function PortalAccessTable({ rows, areaName }: { rows: PortalAccessRow[];
                         {STATUS[row.status].label}
                       </Badge>
                     </TableCell>
-                    <TableCell className="print:hidden">
-                      <Button asChild variant="outline" size="sm" className="h-8 text-xs">
+                    <TableCell className="space-y-1.5 print:hidden">
+                      <Button asChild variant="outline" size="sm" className="h-8 w-full text-xs">
                         <a href={row.certificateUrl} target="_blank" rel="noreferrer">
                           ⬇️ Constancia
                         </a>
                       </Button>
+                      {uploading?.id === row.invitationId ? (
+                        <div className="space-y-1">
+                          <div className="h-1.5 overflow-hidden rounded bg-slate-200">
+                            <div
+                              className="h-full bg-primary transition-all"
+                              style={{ width: `${uploading.percent}%` }}
+                            />
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            {uploading.percent < 100 ? `Subiendo ${uploading.percent}%` : "Optimizando PDF..."}
+                          </p>
+                        </div>
+                      ) : row.signed ? (
+                        <div className="flex items-center justify-between gap-1 text-[11px]">
+                          <a
+                            href={`${constanciaUrl}?invitacion=${row.invitationId}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-center gap-1 font-medium text-emerald-700 hover:underline"
+                            title={`Subida el ${new Date(row.signed.uploadedAt).toLocaleDateString("es-CL")} · ${formatBytes(row.signed.size)}`}
+                          >
+                            <CheckCircle2 className="h-3.5 w-3.5" />
+                            Firmada
+                          </a>
+                          <button
+                            type="button"
+                            className="text-muted-foreground underline hover:text-foreground disabled:opacity-50"
+                            disabled={uploading !== null}
+                            onClick={() => pickFile(row)}
+                          >
+                            Reemplazar
+                          </button>
+                        </div>
+                      ) : (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 w-full gap-1 border-dashed text-xs"
+                          disabled={uploading !== null}
+                          onClick={() => pickFile(row)}
+                        >
+                          <Upload className="h-3.5 w-3.5" />
+                          Subir firmada (PDF)
+                        </Button>
+                      )}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -146,8 +288,11 @@ export function PortalAccessTable({ rows, areaName }: { rows: PortalAccessRow[];
           </div>
         </CardContent>
       </Card>
+      <input ref={fileInput} type="file" accept="application/pdf,.pdf" className="hidden" onChange={handleFile} />
       <p className="text-xs text-muted-foreground print:hidden">
-        El PIN y el enlace desaparecen cuando el funcionario ingresa o cuando la invitación vence.
+        El PIN y el enlace desaparecen cuando el funcionario ingresa o cuando la invitación vence. Para entregar la
+        constancia firmada, descárgala, fírmala, escanéala en PDF y súbela con &quot;Subir firmada&quot; (máx. 20 MB; se
+        optimiza automáticamente).
       </p>
     </div>
   );

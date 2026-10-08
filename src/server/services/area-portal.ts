@@ -5,6 +5,8 @@ import { cookies } from "next/headers";
 import { SignJWT, jwtVerify } from "jose";
 import { prisma } from "@/lib/prisma";
 import { hashSecret, verifySecret } from "@/lib/auth/password";
+import { getSession } from "@/lib/auth/session";
+import { isAdminRole } from "@/lib/auth/rbac";
 
 /**
  * Portal de jefatura: /induccion/[colegio]-[área] muestra a la jefatura y al
@@ -187,6 +189,8 @@ export interface PortalAccessRow {
   status: PortalAccessStatus;
   expiresAt: Date;
   certificateUrl: string;
+  /** Constancia firmada vigente ya subida (por RRHH o por la jefatura). */
+  signed: { uploadedAt: Date; size: number } | null;
 }
 
 /**
@@ -220,6 +224,16 @@ export async function getAreaPortalRows(area: { id: string; institutionId: strin
     },
   });
 
+  const signed = await prisma.signedCertificate.findMany({
+    where: {
+      institutionId: area.institutionId,
+      archivedPeriod: 0,
+      userId: { in: [...new Set(invitations.map((i) => i.userId))] },
+    },
+    select: { userId: true, courseId: true, updatedAt: true, size: true },
+  });
+  const signedByKey = new Map(signed.map((c) => [`${c.userId}:${c.courseId}`, c]));
+
   const seen = new Set<string>();
   const rows: PortalAccessRow[] = [];
   for (const inv of invitations) {
@@ -237,7 +251,38 @@ export async function getAreaPortalRows(area: { id: string; institutionId: strin
       status: inv.isUsed ? "USED" : inv.attempts >= MAX_PIN_ATTEMPTS ? "BLOCKED" : "PENDING",
       expiresAt: inv.expiresAt,
       certificateUrl: await buildCertificateLink({ userId: inv.userId, courseId: inv.courseId }),
+      signed: signedByKey.has(key)
+        ? { uploadedAt: signedByKey.get(key)!.updatedAt, size: signedByKey.get(key)!.size }
+        : null,
     });
   }
   return rows.sort((a, b) => a.name.localeCompare(b.name, "es"));
+}
+
+/**
+ * Acceso al portal para una acción: la jefatura con su cookie o RRHH/Super
+ * Admin del colegio. Devuelve el área y quién actúa (null = jefatura).
+ */
+export async function resolvePortalActor(code: string) {
+  const area = await findAreaByPortalCode(code);
+  if (!area) return null;
+  const session = await getSession();
+  if (session && isAdminRole(session.role) && session.institutionIds.includes(area.institutionId)) {
+    return { area, uploadedById: session.sub };
+  }
+  return (await hasPortalAccess(area)) ? { area, uploadedById: null } : null;
+}
+
+/** Invitación del portal, sólo si el funcionario es (activo) de esta área. */
+export async function findPortalInvitation(area: { id: string; institutionId: string }, invitationId: string) {
+  if (!invitationId) return null;
+  return prisma.invitation.findFirst({
+    where: { id: invitationId, institutionId: area.institutionId, user: { areaId: area.id, isActive: true } },
+    select: {
+      userId: true,
+      courseId: true,
+      user: { select: { name: true } },
+      course: { select: { title: true } },
+    },
+  });
 }

@@ -7,6 +7,7 @@ import os from "os";
 import path from "path";
 import { promisify } from "util";
 import sharp from "sharp";
+import { prisma } from "@/lib/prisma";
 
 const execFileAsync = promisify(execFile);
 
@@ -150,4 +151,66 @@ export async function listOrphanSignedFiles(referenced: Set<string>): Promise<Or
     }
   }
   return orphans.sort((a, b) => b.modifiedAt.getTime() - a.modifiedAt.getTime());
+}
+
+export type StoreSignedCertificateResult =
+  | { ok: true; size: number; originalSize: number; optimized: boolean; replaced: boolean }
+  | { ok: false; status: number; error: string };
+
+/**
+ * Valida, optimiza y guarda la constancia firmada vigente de un funcionario
+ * para un curso, reemplazando la anterior. Lo usan el panel de RRHH y el
+ * portal de jefatura. El llamador ya verificó permisos sobre el funcionario.
+ */
+export async function storeSignedCertificate(input: {
+  institutionId: string;
+  userId: string;
+  courseId: string;
+  file: File;
+  /** Null cuando sube la jefatura desde el portal (no tiene usuario). */
+  uploadedById: string | null;
+  allowedKinds?: SignedCertKind[];
+}): Promise<StoreSignedCertificateResult> {
+  const { institutionId, userId, courseId, file, uploadedById } = input;
+  const allowedKinds = input.allowedKinds ?? ["pdf", "jpg"];
+  const kindsLabel = allowedKinds.length === 1 ? "PDF" : "PDF o JPG";
+
+  if (file.size === 0) return { ok: false, status: 400, error: "El archivo está vacío." };
+  if (file.size > SIGNED_CERT_MAX_BYTES) {
+    return { ok: false, status: 413, error: "El archivo supera el máximo de 20 MB." };
+  }
+
+  const original = Buffer.from(await file.arrayBuffer());
+  const kind = detectKind(original);
+  if (!kind || !allowedKinds.includes(kind)) {
+    return { ok: false, status: 415, error: `Sólo se aceptan archivos ${kindsLabel}.` };
+  }
+
+  const { buffer, optimized } = await optimizeSignedCertificate(original, kind);
+  const fileName = await saveSignedCertificateFile(buffer, kind);
+  const where = { userId_courseId_archivedPeriod: { userId, courseId, archivedPeriod: 0 } };
+  const previous = await prisma.signedCertificate.findUnique({ where, select: { fileName: true } });
+  const data = {
+    fileName,
+    originalName: file.name.slice(0, 255),
+    mimeType: kind === "pdf" ? "application/pdf" : "image/jpeg",
+    size: buffer.length,
+    originalSize: original.length,
+    uploadedById,
+  };
+
+  try {
+    await prisma.signedCertificate.upsert({
+      where,
+      create: { institutionId, userId, courseId, ...data },
+      update: data,
+    });
+  } catch (error) {
+    await deleteSignedCertificateFile(fileName);
+    console.error("[constancias-firmadas] Error guardando registro:", error);
+    return { ok: false, status: 500, error: "No se pudo guardar la constancia." };
+  }
+
+  if (previous) await deleteSignedCertificateFile(previous.fileName);
+  return { ok: true, size: buffer.length, originalSize: original.length, optimized, replaced: Boolean(previous) };
 }
