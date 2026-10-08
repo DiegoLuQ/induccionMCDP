@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth/session";
 import { isAdminRole } from "@/lib/auth/rbac";
 import { failure, success, type ActionResult } from "@/lib/validations/common";
-import { formatPeriod, nextPeriodCode, periodOrder, periodYear } from "@/lib/periods";
+import { formatPeriod, nextPeriodCode, periodOrder, periodSeq, periodYear } from "@/lib/periods";
 
 /** Año del período vigente: el configurado o, si no hay, el año de creación del curso. */
 function effectivePeriod(course: { currentPeriod: number | null; createdAt: Date }): number {
@@ -402,9 +402,8 @@ export async function revertCoursePeriodAction(input: {
 }
 
 /**
- * Corrige el año del período vigente cuando éste aún no tiene actividad
- * (sin avance, respuestas, constancias ni invitaciones). Útil si se abrió un
- * período por error y ya no queda historial al que volver.
+ * Corrige el año del período vigente (ej. se abrió 2027 por error y debía ser
+ * 2026). Conserva toda la actividad del período: sólo cambia su año.
  */
 export async function correctCurrentPeriodAction(input: {
   courseId: string;
@@ -418,38 +417,22 @@ export async function correctCurrentPeriodAction(input: {
     return failure("Año inválido.");
   }
 
-  const evaluations = await prisma.evaluation.findMany({
-    where: { OR: [{ courseId: course.id }, { lesson: { courseId: course.id } }] },
-    select: { id: true },
-  });
-  const [progress, submissions, certificates, invitations, archived] = await Promise.all([
-    prisma.courseProgress.count({ where: { courseId: course.id } }),
-    evaluations.length > 0
-      ? prisma.evaluationSubmission.count({
-          where: { evaluationId: { in: evaluations.map((e) => e.id) }, archivedPeriod: 0 },
-        })
-      : Promise.resolve(0),
-    prisma.signedCertificate.count({ where: { courseId: course.id, archivedPeriod: 0 } }),
-    prisma.invitation.count({ where: { courseId: course.id } }),
-    prisma.courseProgressHistory.findMany({
-      where: { courseId: course.id },
-      distinct: ["period"],
-      select: { period: true },
-    }),
-  ]);
-  if (progress + submissions + certificates + invitations > 0) {
-    return failure(
-      "El período vigente ya tiene actividad (avance, respuestas, constancias o invitaciones). Usa \"Volver al período anterior\" o inicia uno nuevo.",
-    );
-  }
+  const current = effectivePeriod(course);
+  if (periodYear(current) === year) return failure(`El período vigente ya es del año ${year}.`);
 
-  // El período corregido no puede coincidir con uno archivado.
-  const usedYears = new Set(archived.map((a) => periodYear(a.period)));
-  if (usedYears.has(year)) {
-    return failure(`Ya existe un período ${year} archivado. Usa "Volver al período anterior".`);
-  }
+  // Los datos vigentes (avance, respuestas, constancias) no guardan el año: sólo
+  // se etiquetan al archivarse. Por eso basta con cambiar la etiqueta, sin tocar
+  // la actividad. Si ese año ya tiene períodos archivados, se usa el siguiente
+  // número libre (ej. "2026 · 2") para no mezclarlos.
+  const archived = (await getArchivedPeriods(await getCourseScope(course.id))).filter(
+    (p) => periodYear(p) === year,
+  );
+  const nextSeq = archived.length > 0 ? Math.max(...archived.map(periodSeq)) + 1 : 1;
+  if (nextSeq > 99) return failure(`No quedan períodos disponibles en ${year}.`);
+  const code = nextSeq === 1 ? year : year * 100 + nextSeq;
 
-  await prisma.course.update({ where: { id: course.id }, data: { currentPeriod: year } });
+  await prisma.course.update({ where: { id: course.id }, data: { currentPeriod: code } });
   revalidateCourses();
-  return success(undefined, `El período vigente de "${course.title}" ahora es ${year}.`);
+  revalidatePath("/admin/funcionarios");
+  return success(undefined, `El período vigente de "${course.title}" ahora es ${formatPeriod(code)}.`);
 }

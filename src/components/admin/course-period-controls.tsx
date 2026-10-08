@@ -325,12 +325,14 @@ export function CoursePeriodControls({
                   </Button>
                 )}
               </div>
-              {/* Sin actividad en el período vigente: se puede corregir su año. */}
-              {activeCount === 0 && !reverting && (
+              {/* Corregir el año del período vigente (conserva su actividad). */}
+              {!reverting && (
                 <div className="mt-2">
                   {correcting ? (
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-muted-foreground">Corregir año del período vigente:</span>
+                      <span className="text-muted-foreground">
+                        Corregir año del período vigente (se conservan avances, respuestas y constancias):
+                      </span>
                       <Input
                         type="number"
                         value={correctYear}
