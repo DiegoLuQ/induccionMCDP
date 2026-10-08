@@ -2,8 +2,16 @@ import { NextRequest, NextResponse } from "next/server";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
 import crypto from "crypto";
+import { getSession } from "@/lib/auth/session";
+import { isAdminRole } from "@/lib/auth/rbac";
 
 export async function POST(request: NextRequest) {
+  // /api queda fuera del middleware: sólo los administradores pueden subir videos.
+  const session = await getSession();
+  if (!session || !isAdminRole(session.role)) {
+    return NextResponse.json({ error: "No autorizado." }, { status: 401 });
+  }
+
   try {
     const formData = await request.formData();
     const file = formData.get("file") as File | null;

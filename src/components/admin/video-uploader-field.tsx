@@ -4,7 +4,8 @@ import React, { useState, useRef, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
-import { UploadCloud, Link as LinkIcon, Film, CheckCircle2, Loader2, X, Eye } from "lucide-react";
+import { UploadCloud, Link as LinkIcon, Film, CheckCircle2, Loader2, X, Eye, Server } from "lucide-react";
+import { ServerVideoPicker } from "@/components/admin/server-video-picker";
 
 interface VideoUploaderFieldProps {
   id?: string;
@@ -22,9 +23,7 @@ export function VideoUploaderField({
   error,
 }: VideoUploaderFieldProps) {
   // Determinar modo inicial basado en el valor actual
-  const [tab, setTab] = useState<"url" | "upload">(() => {
-    return value && value.startsWith("/uploads/") ? "upload" : "upload";
-  });
+  const [tab, setTab] = useState<"url" | "upload" | "library">("upload");
 
   const [previewUrl, setPreviewUrl] = useState<string>(value || "");
   const [isUploading, setIsUploading] = useState<boolean>(false);
@@ -104,7 +103,7 @@ export function VideoUploaderField({
     <div className="space-y-3 rounded-lg border bg-card p-3 shadow-sm">
       {/* Selector de pestañas: Subir archivo o Pegar URL */}
       <div className="flex items-center justify-between border-b pb-2">
-        <div className="flex items-center gap-1 bg-muted p-0.5 rounded-md text-xs">
+        <div className="flex flex-wrap items-center gap-1 bg-muted p-0.5 rounded-md text-xs">
           <button
             type="button"
             onClick={() => setTab("upload")}
@@ -129,6 +128,19 @@ export function VideoUploaderField({
             <LinkIcon className="h-3.5 w-3.5" />
             Enlace / URL
           </button>
+          <button
+            type="button"
+            onClick={() => setTab("library")}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded transition-colors ${
+              tab === "library"
+                ? "bg-background text-foreground font-medium shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            title="Reutilizar un video que ya está en el servidor, sin volver a subirlo"
+          >
+            <Server className="h-3.5 w-3.5" />
+            Del servidor
+          </button>
         </div>
 
         {previewUrl && (
@@ -146,7 +158,17 @@ export function VideoUploaderField({
       </div>
 
       {/* Contenido según la pestaña activa */}
-      {tab === "upload" ? (
+      {tab === "library" ? (
+        <ServerVideoPicker
+          value={value}
+          onSelect={(url) => {
+            setSelectedFileName("");
+            setUploadError(null);
+            onChange(url);
+            setPreviewUrl(url);
+          }}
+        />
+      ) : tab === "upload" ? (
         <div className="space-y-2">
           <input
             ref={fileInputRef}

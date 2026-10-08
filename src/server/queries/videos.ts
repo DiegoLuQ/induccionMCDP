@@ -12,7 +12,8 @@ import {
 
 export interface VideoUsage {
   lessonTitle: string;
-  courseId: string;
+  /** Null cuando el uso es un tutorial (no pertenece a un curso). */
+  courseId: string | null;
   courseTitle: string;
   institutionName: string;
 }
@@ -41,6 +42,24 @@ export async function getVideoUsageMap(): Promise<Map<string, VideoUsage[]>> {
   });
 
   const map = new Map<string, VideoUsage[]>();
+  // Los tutoriales también usan videos del servidor: cuentan como uso para que
+  // la biblioteca no permita borrarlos.
+  const tutorials = await prisma.tutorial.findMany({
+    where: { videoUrl: { contains: VIDEO_PUBLIC_PREFIX } },
+    select: { title: true, videoUrl: true },
+  });
+  for (const tutorial of tutorials) {
+    const filename = videoFilenameFromUrl(tutorial.videoUrl);
+    if (!filename) continue;
+    const list = map.get(filename) ?? [];
+    list.push({
+      lessonTitle: tutorial.title,
+      courseId: null,
+      courseTitle: "Tutorial de la plataforma",
+      institutionName: "Todos los colegios",
+    });
+    map.set(filename, list);
+  }
   for (const lesson of lessons) {
     const filename = videoFilenameFromUrl(lesson.videoUrl);
     if (!filename) continue;

@@ -288,7 +288,7 @@ export function VideoLibrary({ videos }: { videos: UploadedVideoItem[] }) {
                               {video.usages.map((usage, index) => (
                                 <li key={`${usage.courseId}-${index}`}>
                                   <Link
-                                    href={`/admin/cursos/${usage.courseId}`}
+                                    href={usage.courseId ? `/admin/cursos/${usage.courseId}` : "/tutoriales"}
                                     className="font-medium text-foreground hover:underline"
                                   >
                                     {usage.courseTitle}

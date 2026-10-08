@@ -638,3 +638,29 @@ model CourseProgressHistory {
   @@index([courseId, period])
   @@map("course_progress_history")
 }
+
+// ---------------------------------------------------------------------------
+// TUTORIALES DE USO DE LA PLATAFORMA
+// ---------------------------------------------------------------------------
+
+/// Video tutorial sobre cómo usar la plataforma. Es global (lo ven todos los
+/// colegios) y lo administra el SUPER_ADMIN. La audiencia se filtra por rol y
+/// por slug de cargo (el slug es estable entre colegios, como en el RBAC).
+model Tutorial {
+  id            String   @id @default(cuid())
+  title         String   @db.VarChar(200)
+  description   String?  @db.Text
+  /// Enlace (YouTube, Vimeo, Google Drive, Loom, MP4) o video del servidor (/uploads/videos/...).
+  videoUrl      String   @db.VarChar(1024)
+  /// Roles que lo ven (array de Role). Vacío = todos los roles.
+  roles         Json
+  /// Slugs de cargo que lo ven. Vacío = todos los cargos.
+  positionSlugs Json
+  orderIndex    Int      @default(0)
+  isPublished   Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([isPublished, orderIndex])
+  @@map("tutorials")
+}

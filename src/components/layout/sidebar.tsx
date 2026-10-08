@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import type { Role } from "@prisma/client";
-import { GraduationCap, Menu } from "lucide-react";
+import { GraduationCap, Menu, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Sheet,
@@ -12,6 +12,7 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 import { SidebarNav } from "./sidebar-nav";
+import { useSidebar } from "./sidebar-state";
 import {
   InstitutionSwitcher,
   type InstitutionOption,
@@ -62,37 +63,69 @@ function SidebarBody({
   );
 }
 
-/** Sidebar fijo en desktop. */
+/**
+ * Sidebar fijo en escritorio (≥ xl). Se puede ocultar con el botón del header;
+ * en móvil y tablet se usa el panel deslizante.
+ */
 export function DesktopSidebar(props: SidebarProps) {
+  const { collapsed } = useSidebar();
+  if (collapsed) return null;
+
   return (
-    <aside className="hidden w-64 shrink-0 flex-col border-r bg-card lg:flex">
+    <aside className="sticky top-0 hidden h-screen w-64 shrink-0 flex-col border-r bg-card xl:flex">
       <SidebarBody {...props} />
     </aside>
   );
 }
 
-/** Sidebar en panel deslizante para móvil/tablet. */
+/** Botón para ocultar/mostrar el sidebar fijo en escritorio. */
+function DesktopSidebarToggle() {
+  const { collapsed, toggle } = useSidebar();
+  const label = collapsed ? "Mostrar menú" : "Ocultar menú";
+
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      className="hidden xl:inline-flex"
+      onClick={toggle}
+      aria-label={label}
+      title={label}
+    >
+      {collapsed ? (
+        <PanelLeftOpen className="h-5 w-5" aria-hidden />
+      ) : (
+        <PanelLeftClose className="h-5 w-5" aria-hidden />
+      )}
+    </Button>
+  );
+}
+
+/** Sidebar en panel deslizante para móvil y tablet (< xl). */
 export function MobileSidebar(props: SidebarProps) {
   const [open, setOpen] = useState(false);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <SheetTrigger asChild>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="lg:hidden"
-          aria-label="Abrir menú de navegación"
-        >
-          <Menu className="h-5 w-5" aria-hidden />
-        </Button>
-      </SheetTrigger>
-      <SheetContent side="left" className="p-0">
-        <SheetTitle className="sr-only">Navegación</SheetTitle>
-        <div className="flex h-full flex-col">
-          <SidebarBody {...props} onNavigate={() => setOpen(false)} />
-        </div>
-      </SheetContent>
-    </Sheet>
+    <>
+      <DesktopSidebarToggle />
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="xl:hidden"
+            aria-label="Abrir menú de navegación"
+          >
+            <Menu className="h-5 w-5" aria-hidden />
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="left" className="p-0">
+          <SheetTitle className="sr-only">Navegación</SheetTitle>
+          <div className="flex h-full flex-col">
+            <SidebarBody {...props} onNavigate={() => setOpen(false)} />
+          </div>
+        </SheetContent>
+      </Sheet>
+    </>
   );
 }

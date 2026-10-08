@@ -9,6 +9,7 @@ import {
   FileCheck2,
   GraduationCap,
   LayoutDashboard,
+  LifeBuoy,
   Mail,
   Settings,
   Tags,
@@ -50,6 +51,13 @@ export const NAVIGATION: NavSection[] = [
         href: "/mis-inducciones",
         label: "Mis inducciones",
         icon: GraduationCap,
+        roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO, Role.AUDITOR],
+      },
+      {
+        // Todos lo ven; cada tutorial se filtra además por rol y cargo.
+        href: "/tutoriales",
+        label: "Tutoriales",
+        icon: LifeBuoy,
         roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO, Role.AUDITOR],
       },
     ],
@@ -172,6 +180,10 @@ export const ROUTE_GUARDS: Array<{ prefix: string; roles: Role[] }> = [
     roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO, Role.AUDITOR],
   },
   { prefix: "/reportes", roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.AUDITOR] },
+  {
+    prefix: "/tutoriales",
+    roles: [Role.SUPER_ADMIN, Role.ADMIN_RRHH, Role.FUNCIONARIO, Role.AUDITOR],
+  },
 ];
 
 /**

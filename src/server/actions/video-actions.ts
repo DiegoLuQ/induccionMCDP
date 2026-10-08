@@ -11,7 +11,52 @@ import {
   VIDEO_UPLOAD_DIR,
   isSafeVideoFilename,
 } from "@/lib/uploads";
-import { getVideoUsageMap } from "@/server/queries/videos";
+import { isAdminRole } from "@/lib/auth/rbac";
+import { prisma } from "@/lib/prisma";
+import { getVideoUsageMap, listUploadedVideos } from "@/server/queries/videos";
+
+export interface ReusableVideo {
+  url: string;
+  /** Nombre legible (sin el prefijo de la subida). */
+  name: string;
+  size: number;
+  uploadedAt: Date;
+  /** "Curso · lección" de cada uso, para reconocer el video. */
+  usedIn: string[];
+}
+
+/**
+ * Videos ya subidos al servidor que se pueden asignar a una lección sin volver
+ * a subirlos. La carpeta es compartida por todos los colegios, así que el
+ * ADMIN_RRHH sólo ve los videos usados en cursos de sus colegios; el
+ * SUPER_ADMIN ve todos (incluidos los sueltos).
+ */
+export async function listReusableVideosAction(): Promise<ActionResult<ReusableVideo[]>> {
+  const session = await getSession();
+  if (!session || !isAdminRole(session.role)) return failure("Sin permisos.");
+
+  const videos = await listUploadedVideos();
+  let allowed: Set<string> | null = null;
+  if (session.role !== Role.SUPER_ADMIN) {
+    const lessons = await prisma.lesson.findMany({
+      where: { course: { institutionId: { in: session.institutionIds } }, videoUrl: { not: "" } },
+      select: { videoUrl: true },
+    });
+    allowed = new Set(lessons.map((l) => l.videoUrl.split(/[?#]/)[0] ?? ""));
+  }
+
+  return success(
+    videos
+      .filter((v) => !allowed || allowed.has(v.url) || allowed.has(decodeURIComponent(v.url)))
+      .map((v) => ({
+        url: v.url,
+        name: v.filename.replace(/^(\d+-[a-f0-9]+_)+/, "") || v.filename,
+        size: v.size,
+        uploadedAt: v.uploadedAt,
+        usedIn: v.usages.map((u) => `${u.courseTitle} · ${u.lessonTitle}`),
+      })),
+  );
+}
 
 /**
  * Elimina videos sin uso de la carpeta de subidas. Vuelve a comprobar en el
