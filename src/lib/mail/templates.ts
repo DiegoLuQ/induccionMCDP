@@ -179,22 +179,155 @@ export function invitationEmail(params: InvitationMailParams): {
   return { subject, html, text: textLines.join("\n") };
 }
 
+/**
+ * Aviso de término confirmado por el funcionario. Un mismo correo va al
+ * funcionario y, en copia, a su jefatura, asistente de área y RRHH.
+ */
 export function completionEmail(params: {
   name: string;
+  rut: string;
+  areaName?: string | null;
+  positionName?: string | null;
   courseTitle: string;
-  score: number;
+  score: number | null;
+  confirmedAt: Date;
   institutionName: string;
+  institutionLogoUrl?: string | null;
 }): { subject: string; html: string; text: string } {
-  const subject = `Inducción completada: ${params.courseTitle}`;
+  const subject = `Inducción terminada: ${params.courseTitle} · ${params.name}`;
+  const rows: Array<[string, string]> = [
+    ["Funcionario", params.name],
+    ["RUT", params.rut],
+    ["Área", params.areaName || "Sin área"],
+    ["Cargo", params.positionName || "Sin cargo"],
+    ["Inducción", params.courseTitle],
+    ...(params.score !== null ? [["Puntaje", `${params.score}%`] as [string, string]] : []),
+    ["Confirmado el", formatCl(params.confirmedAt)],
+  ];
+
+  const rowsHtml = rows
+    .map(
+      ([label, value]) => `
+          <tr>
+            <td style="padding:6px 12px 6px 0;font-size:13px;color:#64748b;white-space:nowrap;vertical-align:top;">${label}</td>
+            <td style="padding:6px 0;font-size:14px;color:#0f172a;font-weight:600;">${value}</td>
+          </tr>`,
+    )
+    .join("");
+
   const html = `
-  <div style="font-family:system-ui,sans-serif;padding:24px;color:#0f172a;">
-    <h1 style="font-size:18px;">¡Inducción completada!</h1>
-    <p>Hola <strong>${params.name}</strong>, registramos la aprobación de
-    <strong>&laquo;${params.courseTitle}&raquo;</strong> con un puntaje de
-    <strong>${params.score}%</strong>.</p>
-    <p style="font-size:13px;color:#64748b;">${params.institutionName} · Constancia registrada en el sistema.</p>
+  <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f1f5f9;padding:32px 16px;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+      <div style="background:#047857;padding:24px 28px;color:#f8fafc;">
+        ${
+          params.institutionLogoUrl
+            ? `<img src="${params.institutionLogoUrl}" alt="${params.institutionName}" style="height:36px;margin-bottom:12px;" />`
+            : ""
+        }
+        <p style="margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.8;">
+          ${params.institutionName}
+        </p>
+        <h1 style="margin:6px 0 0;font-size:20px;font-weight:600;">Inducción terminada y confirmada</h1>
+      </div>
+
+      <div style="padding:28px;color:#0f172a;font-size:15px;line-height:1.6;">
+        <p style="margin:0 0 16px;">
+          <strong>${params.name}</strong> confirmó que terminó la inducción
+          <strong>&laquo;${params.courseTitle}&raquo;</strong>.
+        </p>
+
+        <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px;margin:0 0 20px;">
+          <table role="presentation" cellspacing="0" cellpadding="0" border="0" style="border-collapse:collapse;">${rowsHtml}
+          </table>
+        </div>
+
+        <p style="margin:0;font-size:13px;color:#64748b;">
+          Siguiente paso: el funcionario recibió un correo aparte para firmar en línea su Constancia de Participación. Si prefiere firmarla en papel, Recursos Humanos puede subir la constancia escaneada a la plataforma.
+        </p>
+      </div>
+
+      <div style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+        Plataforma de Inducción y Capacitación · Multi-tenant
+      </div>
+    </div>
   </div>`;
-  const text = `Hola ${params.name}, completaste "${params.courseTitle}" con ${params.score}%.`;
+
+  const text = [
+    `${params.name} confirmó que terminó la inducción "${params.courseTitle}".`,
+    ``,
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+    ``,
+    `Siguiente paso: el funcionario recibió un correo aparte para firmar en línea su Constancia de Participación. Si la firma en papel, Recursos Humanos puede subirla escaneada.`,
+  ].join("\n");
+
+  return { subject, html, text };
+}
+
+/**
+ * Enlace para que el funcionario firme su constancia. Va sólo a él: la página
+ * exige su sesión, así que reenviarlo no permite firmar a otra persona.
+ */
+export function signatureRequestEmail(params: {
+  name: string;
+  courseTitle: string;
+  link: string;
+  institutionName: string;
+  institutionLogoUrl?: string | null;
+}): { subject: string; html: string; text: string } {
+  const subject = `Firma tu Constancia de Participación · ${params.courseTitle}`;
+  const html = `
+  <div style="font-family:system-ui,-apple-system,'Segoe UI',sans-serif;background:#f1f5f9;padding:32px 16px;">
+    <div style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:12px;overflow:hidden;border:1px solid #e2e8f0;box-shadow:0 4px 6px -1px rgba(0,0,0,0.05);">
+      <div style="background:#0f172a;padding:24px 28px;color:#f8fafc;">
+        ${
+          params.institutionLogoUrl
+            ? `<img src="${params.institutionLogoUrl}" alt="${params.institutionName}" style="height:36px;margin-bottom:12px;" />`
+            : ""
+        }
+        <p style="margin:0;font-size:13px;letter-spacing:.08em;text-transform:uppercase;opacity:.75;">
+          ${params.institutionName}
+        </p>
+        <h1 style="margin:6px 0 0;font-size:20px;font-weight:600;">Firma tu Constancia de Participación</h1>
+      </div>
+
+      <div style="padding:28px;color:#0f172a;font-size:15px;line-height:1.6;">
+        <p style="margin:0 0 16px;">Hola <strong>${params.name}</strong>,</p>
+        <p style="margin:0 0 16px;">
+          Terminaste la inducción <strong>&laquo;${params.courseTitle}&raquo;</strong>. Ya puedes firmar en línea tu
+          Constancia de Participación, sin imprimir ni escanear.
+        </p>
+
+        <p style="text-align:center;margin:24px 0;">
+          <a href="${params.link}"
+             style="display:inline-block;background:#047857;color:#ffffff;text-decoration:none;
+                    padding:14px 32px;border-radius:8px;font-weight:600;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+            Firmar mi constancia
+          </a>
+        </p>
+
+        <p style="margin:0 0 8px;font-size:13px;color:#64748b;">
+          Para firmar deberás ingresar con tu usuario y clave personal. Sólo tú puedes firmar tu constancia: no reenvíes este correo.
+        </p>
+        <p style="margin:0;font-size:13px;color:#64748b;">
+          La constancia quedará con un sello de firma electrónica con la fecha y hora en que la firmaste.
+        </p>
+      </div>
+
+      <div style="padding:16px 28px;background:#f8fafc;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;">
+        Plataforma de Inducción y Capacitación · Multi-tenant
+      </div>
+    </div>
+  </div>`;
+
+  const text = [
+    `Hola ${params.name},`,
+    ``,
+    `Terminaste la inducción "${params.courseTitle}". Ya puedes firmar en línea tu Constancia de Participación:`,
+    params.link,
+    ``,
+    `Deberás ingresar con tu usuario y clave personal. Sólo tú puedes firmar tu constancia: no reenvíes este correo.`,
+  ].join("\n");
+
   return { subject, html, text };
 }
 

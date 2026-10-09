@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import {
   Award,
   CheckCircle2,
+  FileSignature,
   GraduationCap,
   Loader2,
   Sparkles,
@@ -166,16 +167,24 @@ export function CourseCompletionModal({
               </Button>
             </div>
           ) : (
-            <div className="flex items-center gap-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
-              <CheckCircle2 className="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" />
-              <div>
-                <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
-                  ¡Término confirmado y registrado!
-                </p>
-                <p className="text-xs text-muted-foreground">
-                  Recuerda firmar tu Constancia de Participación y entregarla a Recursos Humanos.
-                </p>
+            <div className="space-y-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3">
+              <div className="flex items-center gap-3">
+                <CheckCircle2 className="h-7 w-7 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                <div>
+                  <p className="text-sm font-semibold text-emerald-800 dark:text-emerald-300">
+                    ¡Término confirmado y registrado!
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Último paso: firma tu Constancia de Participación. También te enviamos el enlace a tu correo.
+                  </p>
+                </div>
               </div>
+              <Button asChild className="w-full gap-2 bg-emerald-600 font-semibold text-white hover:bg-emerald-700">
+                <Link href={`/mis-inducciones/${course.id}/firmar`}>
+                  <FileSignature className="h-4 w-4" />
+                  Firmar mi constancia
+                </Link>
+              </Button>
             </div>
           )}
         </div>

@@ -20,6 +20,28 @@ export interface CertificatePdfParams {
   funcionarioRut: string;
   date: Date;
   topics?: CertificateTopic[];
+  /** Firma electrónica simple: reemplaza la línea en blanco por un sello. */
+  onlineSignature?: {
+    signedAt: Date;
+    email: string;
+    ip?: string | null;
+    verificationCode: string;
+  } | null;
+}
+
+/** "09-10-2026 a las 15:32 hrs." en horario de Chile. */
+function chileDateTime(date: Date): string {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/Santiago",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("day")}-${get("month")}-${get("year")} a las ${get("hour")}:${get("minute")} hrs.`;
 }
 
 const PAGE_W = 215.9;
@@ -244,13 +266,43 @@ export function generateCertificatePdf(params: CertificatePdfParams): Buffer {
   // --- Compromiso y firma ---------------------------------------------------
   const commitment =
     "Asimismo, declaro haber sido informado sobre las personas y los canales a través de los cuales puedo realizar consultas relacionadas con los contenidos expuestos. Del mismo modo, asumo el compromiso de conocer, revisar, cumplir y respetar las normas, los procedimientos y las políticas institucionales informadas durante el desarrollo de esta inducción.";
-  if (y + 45 > PAGE_H - MARGIN_BOTTOM) {
+  if (y + (params.onlineSignature ? 60 : 45) > PAGE_H - MARGIN_BOTTOM) {
     doc.addPage();
     y = MARGIN_TOP;
   }
   y = richParagraph(doc, [{ text: commitment }], MARGIN_X, y, CONTENT_W, 10.5);
 
-  y += 22;
+  const signature = params.onlineSignature;
+  if (signature) {
+    // Sello de firma electrónica simple sobre la línea de firma.
+    y += 6;
+    const boxW = 120;
+    const boxX = center - boxW / 2;
+    const lines = [
+      `Firmado electrónicamente por ${params.funcionarioName.toUpperCase()}`,
+      `RUT ${formatRut(params.funcionarioRut)}, desde el enlace enviado a ${signature.email}`,
+      `el ${chileDateTime(signature.signedAt)}${signature.ip ? ` (IP ${signature.ip})` : ""}`,
+      `Código de verificación: ${signature.verificationCode}`,
+    ];
+    doc.setFont("times", "normal");
+    doc.setFontSize(8.5);
+    const wrapped = lines.flatMap((l) => doc.splitTextToSize(l, boxW - 6) as string[]);
+    const boxH = 6 + wrapped.length * 3.8;
+    doc.setDrawColor(4, 120, 87);
+    doc.setFillColor(236, 253, 245);
+    doc.setLineWidth(0.4);
+    doc.roundedRect(boxX, y, boxW, boxH, 2, 2, "FD");
+    doc.setTextColor(6, 78, 59);
+    wrapped.forEach((line, i) => {
+      doc.setFont("times", i === 0 ? "bold" : "normal");
+      doc.text(line, center, y + 5 + i * 3.8, { align: "center" });
+    });
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(0);
+    y += boxH + 6;
+  } else {
+    y += 22;
+  }
   doc.setLineWidth(0.3);
   doc.line(center - 32, y, center + 32, y);
   doc.setFont("times", "normal");

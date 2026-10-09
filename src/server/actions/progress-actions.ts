@@ -15,7 +15,11 @@ import {
   success,
   type ActionResult,
 } from "@/lib/validations/common";
-import { recalculateCourseProgress } from "@/server/services/progress-service";
+import {
+  notifyCourseConfirmation,
+  recalculateCourseProgress,
+} from "@/server/services/progress-service";
+import { sendSignatureRequest } from "@/server/services/online-signature";
 
 /**
  * Heartbeat del reproductor. El cliente propone el avance, pero el servidor
@@ -180,6 +184,23 @@ export async function confirmCourseCompletionAction(
     }
   } catch (_e) {
     // Non-blocking
+  }
+
+  // Sella la confirmación sólo si no existía: así el correo sale una vez aunque
+  // el funcionario vuelva a abrir el modal y confirme otra vez.
+  const firstConfirmation = await prisma.courseProgress.updateMany({
+    where: { userId: session.sub, courseId, confirmedAt: null },
+    data: { confirmedAt: completedAt },
+  });
+  if (firstConfirmation.count > 0) {
+    try {
+      await notifyCourseConfirmation(session.sub, courseId, completedAt);
+      // Correo aparte, sólo al funcionario, con el enlace para firmar.
+      await sendSignatureRequest(session.sub, courseId);
+    } catch (error) {
+      // El correo no debe impedir que la confirmación quede registrada.
+      console.error("[confirmCourseCompletionAction] aviso por correo", error);
+    }
   }
 
   revalidatePath(`/mis-inducciones/${courseId}`);

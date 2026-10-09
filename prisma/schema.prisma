@@ -503,6 +503,9 @@ model CourseProgress {
   finalScore  Int?
   startedAt   DateTime?
   completedAt DateTime?
+  /// Momento en que el funcionario presionó "Confirmar término". Sella el
+  /// aviso por correo (funcionario, jefatura, asistente y RRHH) una sola vez.
+  confirmedAt DateTime?
   createdAt   DateTime       @default(now())
   updatedAt   DateTime       @updatedAt
 
@@ -597,6 +600,11 @@ model SignedCertificate {
   size          Int
   originalSize  Int
   uploadedById  String?
+  /// Firma electrónica simple hecha por el propio funcionario desde su sesión
+  /// (enlace enviado a su correo). Nulos cuando la constancia se subió escaneada.
+  signedOnlineAt DateTime?
+  signedEmail    String?  @db.VarChar(180)
+  signedIp       String?  @db.VarChar(64)
   /// 0 = período vigente; al iniciar un período nuevo se guarda el año archivado.
   archivedPeriod Int     @default(0)
   createdAt     DateTime @default(now())

@@ -6,14 +6,22 @@ import { generateCertificatePdf, getLogoDataUrl } from "@/server/services/certif
 
 /**
  * Constancia en blanco (para imprimir, firmar y escanear) desde el reporte.
- * Requiere sesión; el auditor-jefatura sólo puede descargar las de sus áreas.
+ * Requiere sesión; el auditor-jefatura sólo puede descargar las de sus áreas y
+ * el funcionario sólo la suya.
  */
 export async function GET(request: NextRequest) {
   const userId = request.nextUrl.searchParams.get("userId") ?? "";
   const courseId = request.nextUrl.searchParams.get("courseId") ?? "";
 
   const session = await getSession();
-  const user = await findStaffInScope(session, userId);
+  // El propio funcionario puede revisarla antes de firmarla en línea.
+  const user =
+    session && userId === session.sub
+      ? await prisma.user.findFirst({
+          where: { id: userId, institutionId: session.institutionId },
+          select: { id: true, name: true, rut: true },
+        })
+      : await findStaffInScope(session, userId);
   if (!session || !user) return new NextResponse("No autorizado", { status: 403 });
 
   const course = await prisma.course.findFirst({

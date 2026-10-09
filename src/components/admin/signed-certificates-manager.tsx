@@ -67,6 +67,8 @@ interface SignedCertificateItem {
   originalSize: number;
   updatedAt: Date;
   uploadedByName: string | null;
+  /** Firmada en línea por el propio funcionario (no escaneada). */
+  signedOnline: boolean;
   /** 0 = período vigente; otro valor = año archivado (historial). */
   archivedPeriod: number;
 }
@@ -509,7 +511,13 @@ export function SignedCertificatesManager({
                         </TableCell>
                         <TableCell className="text-xs text-muted-foreground" suppressHydrationWarning>
                           {formatDateTime(cert.updatedAt)}
-                          {cert.uploadedByName && <span className="block">por {cert.uploadedByName}</span>}
+                          {cert.signedOnline ? (
+                            <span className="block font-medium text-emerald-700 dark:text-emerald-400">
+                              Firmada en línea por el funcionario
+                            </span>
+                          ) : (
+                            cert.uploadedByName && <span className="block">por {cert.uploadedByName}</span>
+                          )}
                         </TableCell>
                         <TableCell className="pr-4">
                           <CertActions cert={cert} />

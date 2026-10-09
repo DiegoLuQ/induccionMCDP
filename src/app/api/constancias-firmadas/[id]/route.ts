@@ -7,7 +7,8 @@ import { signedCertificatePath } from "@/server/services/signed-certificate-file
 
 /**
  * Ver (inline) o descargar (?download=1) una constancia firmada.
- * RRHH/Super Admin del colegio, o el auditor-jefatura si el funcionario es de sus áreas.
+ * RRHH/Super Admin del colegio, el auditor-jefatura si el funcionario es de sus
+ * áreas, o el propio funcionario.
  */
 export async function GET(
   request: NextRequest,
@@ -29,7 +30,8 @@ export async function GET(
   });
   const filePath = record ? signedCertificatePath(record.fileName) : null;
   if (!record || !filePath) return new NextResponse("No encontrado", { status: 404 });
-  if (!(await findStaffInScope(session, record.userId))) {
+  // El propio funcionario siempre puede ver su constancia.
+  if (record.userId !== session.sub && !(await findStaffInScope(session, record.userId))) {
     return new NextResponse("No autorizado", { status: 403 });
   }
 

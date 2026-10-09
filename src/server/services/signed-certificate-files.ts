@@ -197,6 +197,10 @@ export async function storeSignedCertificate(input: {
     size: buffer.length,
     originalSize: original.length,
     uploadedById,
+    // Una constancia escaneada reemplaza a la firmada en línea.
+    signedOnlineAt: null,
+    signedEmail: null,
+    signedIp: null,
   };
 
   try {

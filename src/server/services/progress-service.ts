@@ -1,6 +1,6 @@
 import "server-only";
 
-import { ProgressStatus, SubmissionStatus } from "@prisma/client";
+import { ProgressStatus, Role, SubmissionStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { sendMail } from "@/lib/mail/mailer";
 import { completionEmail } from "@/lib/mail/templates";
@@ -18,7 +18,6 @@ export async function recalculateCourseProgress(
   const course = await prisma.course.findUnique({
     where: { id: courseId },
     include: {
-      institution: { select: { name: true, domain: true } },
       lessons: {
         include: { evaluation: { include: { questions: true } } },
         orderBy: { orderIndex: "asc" },
@@ -172,32 +171,104 @@ export async function recalculateCourseProgress(
         ? previous?.status === ProgressStatus.COMPLETED
           ? {}
           : { completedAt: new Date() }
-        : { completedAt: null }),
+        : // Si deja de estar completo (ej. se agregó una lección), su
+          // confirmación anterior ya no vale y deberá confirmar de nuevo.
+          { completedAt: null, confirmedAt: null }),
     },
   });
 
-  // Evidencia: se notifica una sola vez, al cruzar a COMPLETED.
-  if (isCompleted && previous?.status !== ProgressStatus.COMPLETED) {
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
-      select: { name: true, email: true },
-    });
-    if (user) {
-      const mail = completionEmail({
-        name: user.name,
-        courseTitle: course.title,
-        score: finalScore ?? 100,
-        institutionName: course.institution.name,
-      });
-      await sendMail({
-        to: user.email,
-        institutionDomain: course.institution.domain,
-        ...mail,
-      });
-    }
-  }
-
   return { status, finalScore };
+}
+
+function splitEmails(value: string | null | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(/[,;\s]+/)
+    .map((e) => e.trim().toLowerCase())
+    .filter((e) => e.includes("@"));
+}
+
+/**
+ * Avisa que el funcionario confirmó su término. Va al funcionario y, en copia,
+ * a la jefatura y asistente de su área y a todos los ADMIN_RRHH del colegio.
+ * El llamador garantiza que se invoque una sola vez por confirmación.
+ */
+export async function notifyCourseConfirmation(
+  userId: string,
+  courseId: string,
+  confirmedAt: Date,
+): Promise<boolean> {
+  const [user, course, progress] = await Promise.all([
+    prisma.user.findUnique({
+      where: { id: userId },
+      select: {
+        name: true,
+        rut: true,
+        email: true,
+        corporateEmail: true,
+        position: { select: { name: true } },
+        area: { select: { name: true, jefeEmail: true, asistenteEmail: true } },
+      },
+    }),
+    prisma.course.findUnique({
+      where: { id: courseId },
+      select: {
+        title: true,
+        institutionId: true,
+        institution: { select: { name: true, domain: true, logoUrl: true } },
+      },
+    }),
+    prisma.courseProgress.findUnique({
+      where: { userId_courseId: { userId, courseId } },
+      select: { finalScore: true },
+    }),
+  ]);
+  if (!user || !course) return false;
+
+  // RRHH del colegio: rol base o rol por membresía en este colegio.
+  const rrhh = await prisma.user.findMany({
+    where: {
+      isActive: true,
+      OR: [
+        { institutionId: course.institutionId, role: Role.ADMIN_RRHH },
+        {
+          memberships: {
+            some: { institutionId: course.institutionId, role: Role.ADMIN_RRHH },
+          },
+        },
+      ],
+    },
+    select: { email: true },
+  });
+
+  const to = user.email.toLowerCase();
+  const cc = Array.from(
+    new Set([
+      ...splitEmails(user.corporateEmail),
+      ...splitEmails(user.area?.jefeEmail),
+      ...splitEmails(user.area?.asistenteEmail),
+      ...rrhh.flatMap((r) => splitEmails(r.email)),
+    ]),
+  ).filter((e) => e !== to);
+
+  const mail = completionEmail({
+    name: user.name,
+    rut: user.rut,
+    areaName: user.area?.name,
+    positionName: user.position?.name,
+    courseTitle: course.title,
+    score: progress?.finalScore ?? null,
+    confirmedAt,
+    institutionName: course.institution.name,
+    institutionLogoUrl: course.institution.logoUrl,
+  });
+
+  return sendMail({
+    to,
+    cc: cc.length ? cc : undefined,
+    institutionDomain: course.institution.domain,
+    ...mail,
+  });
 }
 
 /**

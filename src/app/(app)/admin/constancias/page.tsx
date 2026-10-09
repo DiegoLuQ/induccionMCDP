@@ -45,6 +45,7 @@ export default async function SignedCertificatesPage() {
         originalSize: true,
         updatedAt: true,
         archivedPeriod: true,
+        signedOnlineAt: true,
         uploadedBy: { select: { name: true } },
       },
     }),
@@ -88,6 +89,7 @@ export default async function SignedCertificatesPage() {
           originalSize: c.originalSize,
           updatedAt: c.updatedAt,
           uploadedByName: c.uploadedBy?.name ?? null,
+          signedOnline: c.signedOnlineAt !== null,
           archivedPeriod: c.archivedPeriod,
         }))}
       />
