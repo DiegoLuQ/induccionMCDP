@@ -3,6 +3,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
+import { prisma } from "@/lib/prisma";
+import { hasPersonalEmail } from "@/lib/personal-email";
 import { getCoursePlayerData } from "@/server/queries/courses";
 import { PageHeader } from "@/components/shared/page-header";
 import { CoursePlayer } from "@/components/player/course-player";
@@ -39,6 +41,18 @@ export default async function CoursePlayerPage({ params }: PageProps) {
   // existencia entre tenants.
   if (!course) notFound();
 
+  const [user, signed] = await Promise.all([
+    prisma.user.findUnique({ where: { id: session.sub }, select: { email: true } }),
+    prisma.signedCertificate.findUnique({
+      where: {
+        userId_courseId_archivedPeriod: { userId: session.sub, courseId: course.id, archivedPeriod: 0 },
+      },
+      select: { id: true },
+    }),
+  ]);
+  const personalEmail =
+    user && hasPersonalEmail(user.email, course.institution?.domain ?? "") ? user.email : null;
+
   // El paso a IN_PROGRESS lo dispara el reproductor (no se muta en el render).
 
   return (
@@ -55,7 +69,7 @@ export default async function CoursePlayerPage({ params }: PageProps) {
         }
       />
 
-      <CoursePlayer course={course} />
+      <CoursePlayer course={course} personalEmail={personalEmail} certificateSigned={Boolean(signed)} />
     </>
   );
 }

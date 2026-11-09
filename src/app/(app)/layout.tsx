@@ -12,6 +12,7 @@ import { SidebarProvider } from "@/components/layout/sidebar-state";
 import { SIDEBAR_COLLAPSED_COOKIE } from "@/lib/sidebar";
 import { Header } from "@/components/layout/header";
 import { FirstAccessModal } from "@/components/auth/first-access-modal";
+import { hasPersonalEmail } from "@/lib/personal-email";
 
 /**
  * Layout de todas las vistas autenticadas.
@@ -47,6 +48,13 @@ export default async function AppLayout({
   });
 
   const needsFirstAccessSetup = Boolean(userRecord && !userRecord.passwordHash);
+  // Funcionarios que ya tenían clave pero sin correo personal (ahí llega el enlace de firma).
+  const needsPersonalEmail = Boolean(
+    userRecord &&
+      !needsFirstAccessSetup &&
+      session.role === Role.FUNCIONARIO &&
+      !hasPersonalEmail(userRecord.email, userRecord.institution.domain),
+  );
 
   // Selector global de "Inducción activa" (no aplica a funcionarios).
   const activeCourse =
@@ -91,6 +99,9 @@ export default async function AppLayout({
 
         {needsFirstAccessSetup && userRecord && (
           <FirstAccessModal user={userRecord} />
+        )}
+        {needsPersonalEmail && userRecord && (
+          <FirstAccessModal user={userRecord} mode="personal-email" />
         )}
       </div>
     </SidebarProvider>

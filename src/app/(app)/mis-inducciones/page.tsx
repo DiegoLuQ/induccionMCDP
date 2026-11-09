@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { Clock, PlayCircle, Video } from "lucide-react";
+import { Clock, FileSignature, PlayCircle, Video } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { formatDuration } from "@/lib/utils";
 import { getMyCourses } from "@/server/queries/courses";
@@ -73,7 +73,16 @@ export default async function MyCoursesPage() {
                     </p>
                   </div>
 
-                  <Button asChild className="w-full">
+                  {course.confirmedAt && !course.certificateSigned && (
+                    <Button asChild className="w-full gap-2 bg-emerald-600 text-white hover:bg-emerald-700">
+                      <Link href={`/mis-inducciones/${course.id}/firmar`}>
+                        <FileSignature className="h-4 w-4" aria-hidden />
+                        Firmar acta
+                      </Link>
+                    </Button>
+                  )}
+
+                  <Button asChild className="w-full" variant={course.confirmedAt && !course.certificateSigned ? "outline" : "default"}>
                     <Link href={`/mis-inducciones/${course.id}`}>
                       {course.status === "COMPLETED"
                         ? "Ver contenido"

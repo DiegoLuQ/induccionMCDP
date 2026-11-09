@@ -29,6 +29,10 @@ import { CourseCompletionModal } from "./course-completion-modal";
 interface CoursePlayerProps {
   course: CoursePlayerData;
   isPreview?: boolean;
+  /** Correo personal del funcionario (destino del enlace de firma). */
+  personalEmail?: string | null;
+  /** El acta de constancia ya está firmada. */
+  certificateSigned?: boolean;
 }
 
 /**
@@ -36,7 +40,12 @@ interface CoursePlayerProps {
  *  - Video único largo -> una lección.
  *  - Serie de micro-videos -> lista secuencial de cápsulas.
  */
-export function CoursePlayer({ course, isPreview = false }: CoursePlayerProps) {
+export function CoursePlayer({
+  course,
+  isPreview = false,
+  personalEmail = null,
+  certificateSigned = false,
+}: CoursePlayerProps) {
   const router = useRouter();
 
   const firstPending =
@@ -316,6 +325,8 @@ export function CoursePlayer({ course, isPreview = false }: CoursePlayerProps) {
         isOpen={showCompletionModal}
         onOpenChange={setShowCompletionModal}
         isPreview={isPreview}
+        personalEmail={personalEmail}
+        certificateSigned={certificateSigned}
       />
     </>
   );

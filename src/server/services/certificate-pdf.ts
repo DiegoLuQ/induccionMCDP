@@ -280,7 +280,7 @@ export function generateCertificatePdf(params: CertificatePdfParams): Buffer {
     const boxX = center - boxW / 2;
     const lines = [
       `Firmado electrónicamente por ${params.funcionarioName.toUpperCase()}`,
-      `RUT ${formatRut(params.funcionarioRut)}, desde el enlace enviado a ${signature.email}`,
+      `RUT ${formatRut(params.funcionarioRut)}, desde su correo personal ${signature.email}`,
       `el ${chileDateTime(signature.signedAt)}${signature.ip ? ` (IP ${signature.ip})` : ""}`,
       `Código de verificación: ${signature.verificationCode}`,
     ];
@@ -313,6 +313,26 @@ export function generateCertificatePdf(params: CertificatePdfParams): Buffer {
   doc.setFontSize(9.5);
   doc.setTextColor(80, 80, 80);
   doc.text("C.c.: Carpeta personal", MARGIN_X, y + 16);
+
+  // Pie de página: constancia firmada desde el correo personal del funcionario.
+  if (signature) {
+    const footer = `Acta firmada electrónicamente desde el correo personal de ${params.funcionarioName.toUpperCase()} (${signature.email}) el ${chileDateTime(signature.signedAt)}`;
+    const pages = doc.getNumberOfPages();
+    for (let page = 1; page <= pages; page++) {
+      doc.setPage(page);
+      doc.setFont("times", "italic");
+      doc.setFontSize(8);
+      doc.setTextColor(6, 78, 59);
+      const footerLines = doc.splitTextToSize(footer, CONTENT_W) as string[];
+      const baseY = PAGE_H - 8 - (footerLines.length - 1) * 3.4;
+      doc.setDrawColor(4, 120, 87);
+      doc.setLineWidth(0.2);
+      doc.line(MARGIN_X, baseY - 4, PAGE_W - MARGIN_X, baseY - 4);
+      footerLines.forEach((line, i) => doc.text(line, center, baseY + i * 3.4, { align: "center" }));
+    }
+    doc.setTextColor(0, 0, 0);
+    doc.setDrawColor(0);
+  }
 
   return Buffer.from(doc.output("arraybuffer"));
 }

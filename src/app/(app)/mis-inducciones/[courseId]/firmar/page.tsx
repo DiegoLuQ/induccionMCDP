@@ -5,11 +5,12 @@ import { ArrowLeft, CheckCircle2, FileSignature, FileText } from "lucide-react";
 import { requireSession } from "@/lib/auth/session";
 import { prisma } from "@/lib/prisma";
 import { formatRut } from "@/lib/rut";
+import { hasPersonalEmail } from "@/lib/personal-email";
 import { PageHeader } from "@/components/shared/page-header";
 import { SignCertificateForm } from "@/components/player/sign-certificate-form";
 import { Button } from "@/components/ui/button";
 
-export const metadata: Metadata = { title: "Firmar constancia" };
+export const metadata: Metadata = { title: "Firmar acta" };
 export const dynamic = "force-dynamic";
 
 interface PageProps {
@@ -25,8 +26,8 @@ function formatCl(date: Date): string {
 }
 
 /**
- * Firma en línea de la constancia. Siempre muestra y firma la del usuario de
- * la sesión: si otra persona abre el enlace, ve (y firma) sólo la suya.
+ * "Firmar acta": el funcionario acepta firmar y se le envía a su correo
+ * personal el enlace (24 h) desde donde firma. Si ya está firmada, sólo la muestra.
  */
 export default async function SignCertificatePage({ params }: PageProps) {
   const { courseId } = await params;
@@ -35,7 +36,7 @@ export default async function SignCertificatePage({ params }: PageProps) {
   const [course, user, progress, signed] = await Promise.all([
     prisma.course.findFirst({
       where: { id: courseId, institutionId: session.institutionId },
-      select: { id: true, title: true, institution: { select: { name: true } } },
+      select: { id: true, title: true, institution: { select: { name: true, domain: true } } },
     }),
     prisma.user.findUnique({
       where: { id: session.sub },
@@ -99,8 +100,8 @@ export default async function SignCertificatePage({ params }: PageProps) {
           <div className="space-y-3 rounded-xl border bg-muted/30 p-5">
             <p className="font-semibold">Aún no puedes firmar</p>
             <p className="text-sm text-muted-foreground">
-              Primero termina la inducción y presiona &quot;Confirmar término&quot;. Después podrás firmar
-              tu constancia aquí.
+              Primero termina la inducción y presiona &quot;Confirmar término&quot;. Después te enviaremos a
+              tu correo personal el enlace para firmar el acta.
             </p>
             <Button asChild variant="outline">
               <Link href={`/mis-inducciones/${course.id}`}>Ir a la inducción</Link>
@@ -128,7 +129,11 @@ export default async function SignCertificatePage({ params }: PageProps) {
               </a>
             </Button>
 
-            <SignCertificateForm courseId={course.id} courseTitle={course.title} email={user.email} />
+            <SignCertificateForm
+              courseId={course.id}
+              courseTitle={course.title}
+              email={hasPersonalEmail(user.email, course.institution.domain) ? user.email : null}
+            />
           </div>
         )}
       </div>

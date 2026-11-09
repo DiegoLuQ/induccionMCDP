@@ -19,7 +19,6 @@ import {
   notifyCourseConfirmation,
   recalculateCourseProgress,
 } from "@/server/services/progress-service";
-import { sendSignatureRequest } from "@/server/services/online-signature";
 
 /**
  * Heartbeat del reproductor. El cliente propone el avance, pero el servidor
@@ -195,8 +194,8 @@ export async function confirmCourseCompletionAction(
   if (firstConfirmation.count > 0) {
     try {
       await notifyCourseConfirmation(session.sub, courseId, completedAt);
-      // Correo aparte, sólo al funcionario, con el enlace para firmar.
-      await sendSignatureRequest(session.sub, courseId);
+      // El enlace de firma se envía al correo personal cuando el funcionario
+      // acepta firmar el acta (requestSignatureEmailAction), no aquí.
     } catch (error) {
       // El correo no debe impedir que la confirmación quede registrada.
       console.error("[confirmCourseCompletionAction] aviso por correo", error);

@@ -4,7 +4,8 @@ import { verifySession } from "@/lib/auth/jwt";
 import { ROUTE_GUARDS } from "@/lib/auth/rbac";
 
 // /induccion: portal de jefatura (protegido por su propia clave de área).
-const PUBLIC_PATHS = ["/", "/login", "/auth/invitation", "/denegado", "/induccion"];
+// /firmar-acta: firma de la constancia desde el enlace del correo personal (token 24 h).
+const PUBLIC_PATHS = ["/", "/login", "/auth/invitation", "/denegado", "/induccion", "/firmar-acta"];
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;

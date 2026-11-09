@@ -68,6 +68,13 @@ export const getMyCourses = cache(
 
     const activeIds = await getActiveLessonIdSet();
 
+    // Actas ya firmadas (período vigente): no se vuelve a ofrecer "Firmar acta".
+    const signedRows = await prisma.signedCertificate.findMany({
+      where: { userId, archivedPeriod: 0, course: { institutionId } },
+      select: { courseId: true },
+    });
+    const signedCourseIds = new Set(signedRows.map((row) => row.courseId));
+
     return progress.map((entry) => {
       const activeLessons = entry.course.lessons.filter((l) => activeIds.has(l.id));
       const totalLessons = activeLessons.length;
@@ -95,6 +102,8 @@ export const getMyCourses = cache(
         status: entry.status,
         finalScore: entry.finalScore,
         completedAt: entry.completedAt,
+        confirmedAt: entry.confirmedAt,
+        certificateSigned: signedCourseIds.has(entry.courseId),
         totalLessons,
         watchedLessons: watched,
         totalSeconds,

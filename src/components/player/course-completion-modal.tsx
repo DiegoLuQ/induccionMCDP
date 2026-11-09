@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import type { CoursePlayerData } from "@/server/queries/courses";
 import { confirmCourseCompletionAction } from "@/server/actions/progress-actions";
+import { SignCertificateForm } from "@/components/player/sign-certificate-form";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -30,6 +31,10 @@ interface CourseCompletionModalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   isPreview?: boolean;
+  /** Correo personal al que llegará el enlace de firma (null si no se conoce). */
+  personalEmail?: string | null;
+  /** El acta ya está firmada: no se ofrece firmar de nuevo. */
+  certificateSigned?: boolean;
 }
 
 export function CourseCompletionModal({
@@ -37,6 +42,8 @@ export function CourseCompletionModal({
   isOpen,
   onOpenChange,
   isPreview = false,
+  personalEmail = null,
+  certificateSigned = false,
 }: CourseCompletionModalProps) {
   const router = useRouter();
   const [confirmed, setConfirmed] = useState(false);
@@ -132,6 +139,14 @@ export function CourseCompletionModal({
                 Confirma tu término para que quede registrado ante Recursos Humanos.{" "}
                 <strong className="text-foreground">Marca la casilla y presiona &quot;Confirmar término&quot; para continuar.</strong>
               </p>
+              <p className="flex items-start gap-1.5 rounded-md bg-background/70 p-2 text-xs text-muted-foreground">
+                <FileSignature className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" />
+                <span>
+                  Al final se enviará un correo a tu correo personal
+                  {personalEmail ? <> (<strong className="break-all text-foreground">{personalEmail}</strong>)</> : null}{" "}
+                  para que firmes el acta de constancia.
+                </span>
+              </p>
               <label
                 htmlFor="confirm-course-completion"
                 className="flex cursor-pointer select-none items-start gap-2.5 rounded-md border border-emerald-500/20 bg-background p-2.5 transition-colors hover:bg-accent/40"
@@ -175,16 +190,15 @@ export function CourseCompletionModal({
                     ¡Término confirmado y registrado!
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Último paso: firma tu Constancia de Participación. También te enviamos el enlace a tu correo.
+                    {certificateSigned
+                      ? "Tu acta de constancia ya está firmada."
+                      : "Último paso: firma tu acta de constancia. Se enviará un correo a tu correo personal con el enlace para firmarla."}
                   </p>
                 </div>
               </div>
-              <Button asChild className="w-full gap-2 bg-emerald-600 font-semibold text-white hover:bg-emerald-700">
-                <Link href={`/mis-inducciones/${course.id}/firmar`}>
-                  <FileSignature className="h-4 w-4" />
-                  Firmar mi constancia
-                </Link>
-              </Button>
+              {!certificateSigned && !isPreview && (
+                <SignCertificateForm courseId={course.id} courseTitle={course.title} email={personalEmail} />
+              )}
             </div>
           )}
         </div>

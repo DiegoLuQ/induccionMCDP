@@ -271,6 +271,9 @@ export function signatureRequestEmail(params: {
   name: string;
   courseTitle: string;
   link: string;
+  /** Correo personal al que se envía (se menciona en el mensaje). */
+  email: string;
+  validHours: number;
   institutionName: string;
   institutionLogoUrl?: string | null;
 }): { subject: string; html: string; text: string } {
@@ -305,11 +308,14 @@ export function signatureRequestEmail(params: {
           </a>
         </p>
 
+        <p style="margin:0 0 8px;font-size:13px;color:#b45309;font-weight:600;">
+          Este enlace es válido por ${params.validHours} horas. Si vence, solicita uno nuevo desde la plataforma (Mis inducciones &rarr; Firmar acta).
+        </p>
         <p style="margin:0 0 8px;font-size:13px;color:#64748b;">
-          Para firmar deberás ingresar con tu usuario y clave personal. Sólo tú puedes firmar tu constancia: no reenvíes este correo.
+          Te lo enviamos a tu correo personal (${params.email}). Sólo tú puedes firmar tu constancia: no reenvíes este correo.
         </p>
         <p style="margin:0;font-size:13px;color:#64748b;">
-          La constancia quedará con un sello de firma electrónica con la fecha y hora en que la firmaste.
+          La constancia quedará sellada como firmada desde tu correo personal, con la fecha y hora de la firma.
         </p>
       </div>
 
@@ -325,7 +331,8 @@ export function signatureRequestEmail(params: {
     `Terminaste la inducción "${params.courseTitle}". Ya puedes firmar en línea tu Constancia de Participación:`,
     params.link,
     ``,
-    `Deberás ingresar con tu usuario y clave personal. Sólo tú puedes firmar tu constancia: no reenvíes este correo.`,
+    `El enlace es válido por ${params.validHours} horas. Si vence, solicita uno nuevo desde la plataforma (Mis inducciones > Firmar acta).`,
+    `Sólo tú puedes firmar tu constancia: no reenvíes este correo.`,
   ].join("\n");
 
   return { subject, html, text };

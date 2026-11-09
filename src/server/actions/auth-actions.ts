@@ -16,9 +16,11 @@ import {
 import {
   changePasswordSchema,
   loginSchema,
+  personalEmailOnlySchema,
   redeemInvitationSchema,
   setupInitialAccessSchema,
 } from "@/lib/validations/auth";
+import { personalEmailError } from "@/lib/personal-email";
 import { switchInstitutionSchema } from "@/lib/validations/institution";
 import {
   failure,
@@ -121,6 +123,7 @@ export async function setupInitialAccessAction(
     pin: formData.get("pin"),
     confirmPin: formData.get("confirmPin"),
     corporateEmail: formData.get("corporateEmail") || undefined,
+    personalEmail: formData.get("personalEmail") ?? undefined,
   });
   if (!parsed.success) return fromZodError(parsed.error);
 
@@ -130,6 +133,13 @@ export async function setupInitialAccessAction(
   });
 
   if (!user) return failure("Usuario no encontrado.");
+
+  const personalEmail = parsed.data.personalEmail;
+  const personalError = personalEmailError(personalEmail, user.institution.domain);
+  if (personalError) return failure(personalError, { personalEmail: [personalError] });
+  if (await emailTakenByOther(user.institutionId, user.id, personalEmail)) {
+    return failure("Ese correo personal ya está registrado por otro usuario del colegio.");
+  }
 
   let validatedCorporateEmail: string | undefined = undefined;
   if (parsed.data.corporateEmail) {
@@ -167,20 +177,18 @@ export async function setupInitialAccessAction(
 
   const passwordHash = await hashSecret(parsed.data.pin);
 
+  // `email` guarda el correo personal (ahí llega el enlace para firmar la constancia).
   const updateData: {
     passwordHash: string;
     corporateEmail?: string;
-    email?: string;
+    email: string;
   } = {
     passwordHash,
+    email: personalEmail,
   };
 
   if (validatedCorporateEmail) {
     updateData.corporateEmail = validatedCorporateEmail;
-    // Si su email era genérico/placeholder o contenía el RUT, actualizarlo al oficial
-    if (!user.email || user.email.startsWith(user.rut.replace(/[^0-9]/g, ""))) {
-      updateData.email = validatedCorporateEmail;
-    }
   }
 
   await prisma.user.update({
@@ -189,10 +197,59 @@ export async function setupInitialAccessAction(
   });
 
   revalidatePath("/", "layout");
-  return success(
-    undefined,
-    "¡Tu clave de 6 dígitos y correo institucional fueron configurados con éxito!",
-  );
+  return success(undefined, "¡Tu clave y tus correos fueron configurados con éxito!");
+}
+
+/** ¿Otro usuario del colegio ya usa ese correo (personal o institucional)? */
+async function emailTakenByOther(
+  institutionId: string,
+  userId: string,
+  email: string,
+): Promise<boolean> {
+  const existing = await prisma.user.findFirst({
+    where: {
+      institutionId,
+      id: { not: userId },
+      OR: [{ email }, { corporateEmail: email }],
+    },
+    select: { id: true },
+  });
+  return Boolean(existing);
+}
+
+/**
+ * Funcionario que ya tenía clave pero no correo personal: lo registra para
+ * poder recibir el enlace de firma de su constancia.
+ */
+export async function savePersonalEmailAction(
+  _prev: ActionResult | null,
+  formData: FormData,
+): Promise<ActionResult> {
+  const session = await getSession();
+  if (!session) return failure("Sesión expirada o no iniciada.");
+
+  const parsed = personalEmailOnlySchema.safeParse({
+    personalEmail: formData.get("personalEmail") ?? undefined,
+  });
+  if (!parsed.success) return fromZodError(parsed.error);
+
+  const user = await prisma.user.findUnique({
+    where: { id: session.sub },
+    select: { id: true, institutionId: true, institution: { select: { domain: true } } },
+  });
+  if (!user) return failure("Usuario no encontrado.");
+
+  const personalEmail = parsed.data.personalEmail;
+  const personalError = personalEmailError(personalEmail, user.institution.domain);
+  if (personalError) return failure(personalError, { personalEmail: [personalError] });
+  if (await emailTakenByOther(user.institutionId, user.id, personalEmail)) {
+    return failure("Ese correo personal ya está registrado por otro usuario del colegio.");
+  }
+
+  await prisma.user.update({ where: { id: user.id }, data: { email: personalEmail } });
+
+  revalidatePath("/", "layout");
+  return success(undefined, "Correo personal guardado.");
 }
 
 /**

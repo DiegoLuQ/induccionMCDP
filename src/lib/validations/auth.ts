@@ -45,11 +45,26 @@ export const setupInitialAccessSchema = z
       .email("Ingresa un formato de correo válido")
       .optional()
       .or(z.literal("")),
+    /** Obligatorio: ahí llega el enlace para firmar la constancia. Cualquier dominio. */
+    personalEmail: z
+      .string({ required_error: "Ingresa tu correo personal" })
+      .trim()
+      .toLowerCase()
+      .email("Ingresa un correo personal válido"),
   })
   .refine((data) => data.pin === data.confirmPin, {
     message: "Las claves no coinciden",
     path: ["confirmPin"],
   });
+
+/** Funcionario que ya tenía clave pero aún no registra su correo personal. */
+export const personalEmailOnlySchema = z.object({
+  personalEmail: z
+    .string({ required_error: "Ingresa tu correo personal" })
+    .trim()
+    .toLowerCase()
+    .email("Ingresa un correo personal válido"),
+});
 
 export const changePasswordSchema = z
   .object({

@@ -41,11 +41,15 @@ COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/prisma ./prisma
 COPY --from=builder --chown=node:node /app/public ./public
 COPY --from=builder --chown=node:node /app/.next ./.next
+COPY --chown=node:node docker-entrypoint.sh ./docker-entrypoint.sh
 
 # Los videos subidos se guardan en public/uploads (montado como volumen).
 RUN mkdir -p /app/public/uploads/videos /app/public/uploads/constancias \
-    && chown -R node:node /app/public/uploads
+    && chown -R node:node /app/public/uploads \
+    && chmod +x ./docker-entrypoint.sh
 
 USER node
 EXPOSE 3000
+
+ENTRYPOINT ["./docker-entrypoint.sh"]
 CMD ["npm", "start"]

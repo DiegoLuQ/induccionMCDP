@@ -8,8 +8,8 @@ services:
       - .env
     environment:
       # Dentro del contenedor "localhost" no apunta al MySQL del servidor,
-      # por eso se usa una URL propia para Docker.
-      - DATABASE_URL=${DOCKER_DATABASE_URL}
+      # por eso se usa una URL propia para Docker (o fallback a DATABASE_URL).
+      - DATABASE_URL=${DOCKER_DATABASE_URL:-$DATABASE_URL}
       - APP_URL=https://${DOMAIN}
       # Proxy inverso + SSL (nginx-proxy / acme-companion)
       - VIRTUAL_HOST=${DOMAIN}
